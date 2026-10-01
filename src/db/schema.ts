@@ -10,6 +10,7 @@ import {
   jsonb,
   primaryKey,
   index,
+  unique,
   uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -18,6 +19,15 @@ import { relations } from "drizzle-orm";
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
+
+/** Candidate-facing languages: English and Canadian French. */
+export const locale = pgEnum("locale", ["en", "fr-CA"]);
+
+export const consentPurpose = pgEnum("consent_purpose", ["application_processing", "talent_pool", "marketing"]);
+export const consentSource = pgEnum("consent_source", ["career_site", "recruiter", "referral", "import", "email"]);
+export const retentionRecordType = pgEnum("retention_record_type", ["candidate", "archived_application", "email", "interview_feedback"]);
+export const dsrType = pgEnum("dsr_type", ["access", "correction", "deletion"]);
+export const dsrStatus = pgEnum("dsr_status", ["received", "verifying", "in_progress", "completed", "rejected"]);
 
 export const userRole = pgEnum("user_role", [
   "admin",
@@ -185,7 +195,7 @@ export const jobStages = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     jobId: uuid("job_id")
       .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
+      .references(() => jobs.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     type: stageType("type").notNull(),
     position: integer("position").notNull(),
@@ -199,7 +209,7 @@ export const jobHiringTeam = pgTable(
   {
     jobId: uuid("job_id")
       .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
+      .references(() => jobs.id, { onDelete: "restrict" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
@@ -212,7 +222,7 @@ export const openings = pgTable("openings", {
   id: uuid("id").primaryKey().defaultRandom(),
   jobId: uuid("job_id")
     .notNull()
-    .references(() => jobs.id, { onDelete: "cascade" }),
+    .references(() => jobs.id, { onDelete: "restrict" }),
   code: text("code").notNull().unique(),
   status: openingStatus("status").notNull().default("open"),
   reason: openingReason("reason").notNull().default("new_headcount"),
@@ -243,6 +253,12 @@ export const candidates = pgTable(
     resumeText: text("resume_text"),
     resumeFileName: text("resume_file_name"),
     ownerId: uuid("owner_id").references(() => users.id),
+    /** Language for candidate-facing email and pages (ARCHITECTURE.md §7.2). */
+    preferredLocale: locale("preferred_locale").notNull().default("en"),
+    /** IANA time zone for candidate-facing times; null = brand default (America/Toronto). */
+    timezone: text("timezone"),
+    /** Set when personal data was wiped (deletion request or retention). Row and history stay. */
+    anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -267,10 +283,10 @@ export const applications = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     candidateId: uuid("candidate_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => candidates.id, { onDelete: "restrict" }),
     jobId: uuid("job_id")
       .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
+      .references(() => jobs.id, { onDelete: "restrict" }),
     stageId: uuid("stage_id")
       .notNull()
       .references(() => jobStages.id),
@@ -298,7 +314,7 @@ export const applicationStageEvents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     applicationId: uuid("application_id")
       .notNull()
-      .references(() => applications.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "restrict" }),
     fromStageId: uuid("from_stage_id").references(() => jobStages.id),
     toStageId: uuid("to_stage_id").references(() => jobStages.id),
     /** Status after this event, so archive/hire transitions are captured too. */
@@ -316,10 +332,8 @@ export const activities = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     candidateId: uuid("candidate_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
-    applicationId: uuid("application_id").references(() => applications.id, {
-      onDelete: "cascade",
-    }),
+      .references(() => candidates.id, { onDelete: "restrict" }),
+    applicationId: uuid("application_id").references(() => applications.id, { onDelete: "restrict" }),
     type: activityType("type").notNull(),
     actorId: uuid("actor_id").references(() => users.id),
     body: text("body"),
@@ -349,7 +363,7 @@ export const interviews = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     applicationId: uuid("application_id")
       .notNull()
-      .references(() => applications.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "restrict" }),
     stageId: uuid("stage_id").references(() => jobStages.id),
     feedbackFormId: uuid("feedback_form_id").references(() => feedbackForms.id),
     title: text("title").notNull(),
@@ -371,7 +385,7 @@ export const interviewInterviewers = pgTable(
   {
     interviewId: uuid("interview_id")
       .notNull()
-      .references(() => interviews.id, { onDelete: "cascade" }),
+      .references(() => interviews.id, { onDelete: "restrict" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
@@ -385,7 +399,7 @@ export const scorecards = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     applicationId: uuid("application_id")
       .notNull()
-      .references(() => applications.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "restrict" }),
     interviewId: uuid("interview_id").references(() => interviews.id, { onDelete: "set null" }),
     authorId: uuid("author_id")
       .notNull()
@@ -409,7 +423,7 @@ export const schedulingLinks = pgTable("scheduling_links", {
   tokenHash: text("token_hash").notNull().unique(),
   applicationId: uuid("application_id")
     .notNull()
-    .references(() => applications.id, { onDelete: "cascade" }),
+    .references(() => applications.id, { onDelete: "restrict" }),
   stageId: uuid("stage_id").references(() => jobStages.id),
   interviewerIds: uuid("interviewer_ids").array().notNull(),
   durationMinutes: integer("duration_minutes").notNull().default(45),
@@ -431,7 +445,7 @@ export const offers = pgTable("offers", {
   id: uuid("id").primaryKey().defaultRandom(),
   applicationId: uuid("application_id")
     .notNull()
-    .references(() => applications.id, { onDelete: "cascade" }),
+    .references(() => applications.id, { onDelete: "restrict" }),
   openingId: uuid("opening_id").references(() => openings.id),
   status: offerStatus("status").notNull().default("draft"),
   baseSalary: integer("base_salary").notNull(),
@@ -449,7 +463,7 @@ export const offerApprovals = pgTable("offer_approvals", {
   id: uuid("id").primaryKey().defaultRandom(),
   offerId: uuid("offer_id")
     .notNull()
-    .references(() => offers.id, { onDelete: "cascade" }),
+    .references(() => offers.id, { onDelete: "restrict" }),
   approverId: uuid("approver_id")
     .notNull()
     .references(() => users.id),
@@ -469,7 +483,11 @@ export const emailTemplates = pgTable("email_templates", {
   subject: text("subject").notNull(),
   /** Supports {{candidate.firstName}}, {{job.title}}, {{brand.name}}, {{sender.name}} merge fields. */
   body: text("body").notNull(),
+  /** Null = available to every brand. */
   brandId: uuid("brand_id").references(() => brands.id),
+  locale: locale("locale").notNull().default("en"),
+  /** Groups the EN and FR-CA versions of the same template. */
+  templateKey: text("template_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -479,7 +497,7 @@ export const emails = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     candidateId: uuid("candidate_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => candidates.id, { onDelete: "restrict" }),
     /** Job context for visibility (ARCHITECTURE.md §3.7). Null = candidate-level email, broad roles only. */
     applicationId: uuid("application_id").references(() => applications.id),
     direction: emailDirection("direction").notNull(),
@@ -538,6 +556,84 @@ export const integrationEvents = pgTable("integration_events", {
 
 export const brandsRelations = relations(brands, ({ many }) => ({ jobs: many(jobs) }));
 
+// ---------------------------------------------------------------------------
+// Localization
+// ---------------------------------------------------------------------------
+
+/** Translated job posting text. The base `jobs` row holds the EN version. */
+export const jobTranslations = pgTable(
+  "job_translations",
+  {
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+    locale: locale("locale").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.jobId, t.locale] })],
+);
+
+// ---------------------------------------------------------------------------
+// Privacy & compliance (ARCHITECTURE.md §5): PIPEDA, Quebec Law 25, CASL
+// ---------------------------------------------------------------------------
+
+/** Every grant or withdrawal of consent. Append-only; the latest row per purpose wins. */
+export const consentRecords = pgTable(
+  "consent_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "restrict" }),
+    purpose: consentPurpose("purpose").notNull(),
+    granted: boolean("granted").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    locale: locale("locale").notNull().default("en"),
+    source: consentSource("source").notNull(),
+    recordedById: uuid("recorded_by_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (t) => [index("consent_candidate_idx").on(t.candidateId, t.purpose, t.createdAt)],
+);
+
+/** How long each kind of record is kept, per brand (null brand = default for all brands). */
+export const retentionPolicies = pgTable(
+  "retention_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    brandId: uuid("brand_id").references(() => brands.id),
+    recordType: retentionRecordType("record_type").notNull(),
+    retentionDays: integer("retention_days").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("retention_brand_type_uq").on(t.brandId, t.recordType).nullsNotDistinct()],
+);
+
+/** Access, correction and deletion requests, tracked against their legal deadline. */
+export const dataSubjectRequests = pgTable(
+  "data_subject_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    candidateId: uuid("candidate_id").references(() => candidates.id, { onDelete: "restrict" }),
+    requesterEmail: text("requester_email").notNull(),
+    type: dsrType("type").notNull(),
+    status: dsrStatus("status").notNull().default("received"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    /** 30 days under PIPEDA and Law 25. */
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    handledById: uuid("handled_by_id").references(() => users.id),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("dsr_status_idx").on(t.status, t.dueAt)],
+);
+
 export const usersRelations = relations(users, ({ one }) => ({
   manager: one(users, { fields: [users.managerId], references: [users.id] }),
 }));
@@ -551,6 +647,7 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
   coordinator: one(users, { fields: [jobs.coordinatorId], references: [users.id], relationName: "jobCoordinator" }),
   stages: many(jobStages),
   openings: many(openings),
+  translations: many(jobTranslations),
   team: many(jobHiringTeam),
   applications: many(applications),
 }));
@@ -573,6 +670,15 @@ export const candidatesRelations = relations(candidates, ({ one, many }) => ({
   applications: many(applications),
   activities: many(activities),
   emails: many(emails),
+  consents: many(consentRecords),
+}));
+
+export const consentRecordsRelations = relations(consentRecords, ({ one }) => ({
+  candidate: one(candidates, { fields: [consentRecords.candidateId], references: [candidates.id] }),
+}));
+
+export const jobTranslationsRelations = relations(jobTranslations, ({ one }) => ({
+  job: one(jobs, { fields: [jobTranslations.jobId], references: [jobs.id] }),
 }));
 
 export const applicationsRelations = relations(applications, ({ one, many }) => ({

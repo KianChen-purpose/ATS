@@ -17,6 +17,10 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "data_subject_requests",
+    "consent_records",
+    "retention_policies",
+    "job_translations",
     "integration_events",
     "scheduling_links",
     "audit_logs",
@@ -234,18 +238,23 @@ async function main() {
     ])
     .returning();
 
+  await db.insert(s.retentionPolicies).values(DEMO_RETENTION);
   await db.insert(s.emailTemplates).values([
+    ...FR_TEMPLATES,
     {
+      templateKey: "screen_invite",
       name: "Recruiter screen invite",
       subject: "{{brand.name}} – let's chat about the {{job.title}} role",
       body: "Hi {{candidate.firstName}},\n\nThanks for your interest in the {{job.title}} role at {{brand.name}}. I'd love to set up a 30-minute call to learn more about you.\n\nBest,\n{{sender.name}}",
     },
     {
+      templateKey: "rejection_review",
       name: "Rejection – after application review",
       subject: "Your application to {{brand.name}}",
       body: "Hi {{candidate.firstName}},\n\nThank you for applying for the {{job.title}} role. After careful review we've decided to move forward with other candidates. We'll keep your profile on file for future roles.\n\nAll the best,\n{{sender.name}}",
     },
     {
+      templateKey: "outreach_sourced",
       name: "Outreach – sourced candidate",
       subject: "{{job.title}} at {{brand.name}}",
       body: "Hi {{candidate.firstName}},\n\nYour background caught my eye. We're hiring a {{job.title}} at {{brand.name}} and I think you'd be a great fit. Open to a quick chat?\n\n{{sender.name}}",
@@ -294,6 +303,14 @@ async function main() {
     const team = faker.helpers.arrayElements(interviewers.filter((u) => u.id !== job.hiringManagerId), 3);
     await db.insert(s.jobHiringTeam).values(team.map((u) => ({ jobId: job.id, userId: u.id })));
     jobRows.push({ job, stages, dept: j.dept, team });
+    if (job.publishedOnCareerSite) {
+      await db.insert(s.jobTranslations).values({
+        jobId: job.id,
+        locale: "fr-CA",
+        title: job.title,
+        description: jobDescriptionFr(job.title, BRANDS.find((b) => b.slug === j.brand)!.name),
+      });
+    }
   }
 
   console.log("Creating candidates & applications…");
@@ -312,6 +329,7 @@ async function main() {
     const openedAgo = Math.floor((now - (job.openedAt ?? job.createdAt).getTime()) / DAY);
     const appliedAgo = faker.number.int({ min: 1, max: Math.max(2, openedAgo) });
 
+    const candLocation = pick(LOCATIONS).name;
     const [cand] = await db
       .insert(s.candidates)
       .values({
@@ -319,7 +337,7 @@ async function main() {
         lastName,
         email: faker.internet.email({ firstName, lastName }).toLowerCase(),
         phone: faker.phone.number({ style: "national" }),
-        location: pick(LOCATIONS).name,
+        location: candLocation,
         currentTitle: title,
         currentCompany: company,
         linkedinUrl: `https://www.linkedin.com/in/${firstName}-${lastName}-${faker.string.alphanumeric(5)}`.toLowerCase(),
@@ -327,10 +345,24 @@ async function main() {
         resumeText: `${firstName} ${lastName}\n${title} at ${company}\n\nSkills: ${skills.join(", ")}\n\n${faker.lorem.paragraphs(2)}`,
         resumeFileName: `${firstName}_${lastName}_Resume.pdf`,
         ownerId: job.recruiterId,
+        preferredLocale: candLocation === "Montréal, QC" ? "fr-CA" : "en",
         createdAt: daysAgo(appliedAgo),
         updatedAt: daysAgo(Math.max(0, appliedAgo - 3)),
       })
       .returning();
+
+    // Applying records consent to process the application. Sourced prospects haven't consented to anything.
+    if (source.category !== "sourced") {
+      await db.insert(s.consentRecords).values({
+        candidateId: cand.id,
+        purpose: "application_processing",
+        granted: true,
+        policyVersion: "2026-10",
+        locale: cand.preferredLocale,
+        source: source.category === "referral" ? "referral" : "career_site",
+        createdAt: daysAgo(appliedAgo),
+      });
+    }
 
     // Sourced candidates start at Lead; inbound at Application Review.
     const startPos = source.category === "sourced" ? 0 : 1;
@@ -619,6 +651,65 @@ function jobTitleVariant(title: string) {
   const base = title.replace(/^(Senior|Staff|Junior|Associate|Chief)\s+/, "").replace(/\s*\(.*\)|\s*–.*$/, "");
   return pick(["", "", "Senior ", "Lead "]) + base;
 }
+
+function jobDescriptionFr(title: string, brand: string) {
+  return `## À propos de ${brand}
+
+${brand} fait partie de Purpose Unlimited, une société indépendante de gestion d'actifs et de services financiers axée sur la technologie. Nous bâtissons un meilleur avenir financier pour les Canadiens.
+
+## Le poste
+
+Nous recherchons une personne pour le poste de **${title}** au sein de notre équipe.
+
+## Ce que vous ferez
+
+- Prendre en charge des résultats concrets dès le premier jour
+- Collaborer étroitement avec les équipes des placements, de la technologie et de la distribution
+- Contribuer à façonner notre façon de travailler
+
+## Ce que vous apportez
+
+- Une expérience pertinente dans un rôle semblable
+- Une communication claire et un bon jugement
+- De la curiosité et le goût de l'action
+`;
+}
+
+/** Canadian French versions of the default templates (ARCHITECTURE.md §7.2). */
+const FR_TEMPLATES: (typeof s.emailTemplates.$inferInsert)[] = [
+  {
+    templateKey: "screen_invite",
+    locale: "fr-CA",
+    name: "Invitation à un premier appel (FR)",
+    subject: "{{brand.name}} – discutons du poste de {{job.title}}",
+    body: "Bonjour {{candidate.firstName}},\n\nMerci de votre intérêt pour le poste de {{job.title}} chez {{brand.name}}. J'aimerais planifier un appel de 30 minutes pour mieux vous connaître.\n\nCordialement,\n{{sender.name}}",
+  },
+  {
+    templateKey: "rejection_review",
+    locale: "fr-CA",
+    name: "Refus – après examen de la candidature (FR)",
+    subject: "Votre candidature chez {{brand.name}}",
+    body: "Bonjour {{candidate.firstName}},\n\nMerci d'avoir postulé au poste de {{job.title}}. Après un examen attentif, nous avons décidé de poursuivre avec d'autres candidatures. Nous conserverons votre profil pour de futurs postes.\n\nBonne continuation,\n{{sender.name}}",
+  },
+  {
+    templateKey: "outreach_sourced",
+    locale: "fr-CA",
+    name: "Approche – candidat recruté (FR)",
+    subject: "{{job.title}} chez {{brand.name}}",
+    body: "Bonjour {{candidate.firstName}},\n\nVotre parcours a retenu mon attention. Nous recrutons pour un poste de {{job.title}} chez {{brand.name}} et je pense que vous seriez un excellent choix. Seriez-vous ouvert à une brève discussion?\n\n{{sender.name}}",
+  },
+];
+
+/**
+ * Demo retention defaults (null brand = all brands). Real periods are a policy decision for
+ * Legal/Privacy; these exist so the schema and worker have something to read.
+ */
+const DEMO_RETENTION: (typeof s.retentionPolicies.$inferInsert)[] = [
+  { recordType: "candidate", retentionDays: 730 },
+  { recordType: "archived_application", retentionDays: 730 },
+  { recordType: "email", retentionDays: 730 },
+  { recordType: "interview_feedback", retentionDays: 730 },
+];
 
 function jobDescription(title: string, brand: string) {
   return `## About ${brand}

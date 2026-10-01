@@ -43,6 +43,11 @@ export function canViewCompensation(actor: UserActor) {
   return actor.role !== "interviewer";
 }
 
+/** Privacy operations: anonymization, data subject requests, retention settings. */
+export function canAdministerPrivacy(actor: Actor) {
+  return actor.kind === "system" ? actor.name === "worker" : actor.role === "admin";
+}
+
 /** Field-level: integration log and other admin settings. */
 export function canViewSettings(actor: UserActor) {
   return actor.role === "admin";

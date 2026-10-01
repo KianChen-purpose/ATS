@@ -29,6 +29,13 @@
       "when": 1790885478724,
       "tag": "0003_audit_request_context_and_append_only",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790885720391,
+      "tag": "0004_restrict_history_privacy_and_locales",
+      "breakpoints": true
     }
   ]
 }

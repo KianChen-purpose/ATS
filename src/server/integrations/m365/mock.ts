@@ -95,7 +95,7 @@ export const mockM365: M365Client = {
       });
       return res;
     },
-    async cancelEvent(organizer, eventId, comment) {
+    async cancelEvent(organizer, eventId) {
       await recordIntegrationEvent({
         service: "calendar",
         operation: "cancelEvent",
