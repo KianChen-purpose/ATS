@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/* PATS design tokens. Swap these for official Purpose brand values. */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-accent-50: #f3f1ff;
+  --color-accent-100: #e9e5ff;
+  --color-accent-200: #d5ceff;
+  --color-accent-500: #6d5cf6;
+  --color-accent-600: #5b45e8;
+  --color-accent-700: #4c36cc;
+
+  --color-canvas: #f7f7f8;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-zinc-900);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Dense, Ashby-like defaults */
+:focus-visible {
+  outline: 2px solid var(--color-accent-500);
+  outline-offset: 1px;
+}
+
+.prose-job h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 1.25rem 0 0.5rem;
+}
+.prose-job p,
+.prose-job li {
+  line-height: 1.6;
+}
+.prose-job ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+
+.cmdk-group [cmdk-group-heading] {
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-zinc-400);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
