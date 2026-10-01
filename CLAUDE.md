@@ -1,6 +1,6 @@
 # CLAUDE.md — rules for every session working on PATS
 
-Read [PRD.md](PRD.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before you write any code. Everything in ARCHITECTURE.md marked **LOCKED** is binding. If a task seems to need something different, stop and ask Kian. Do not work around it.
+Read [PRD.md](PRD.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before you write any code, and [brand/BRAND.md](brand/BRAND.md) before you build any UI. Everything in ARCHITECTURE.md marked **LOCKED** is binding. If a task seems to need something different, stop and ask Kian. Do not work around it.
 
 ## Non-negotiables (check every change against these)
 
@@ -21,7 +21,8 @@ Read [PRD.md](PRD.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before yo
 7. **Bilingual and brand-aware:** candidate-facing content supports EN and FR-CA. Templates, career sites and approval chains are scoped by brand.
 8. **Integrations go only through the ports:** `m365()`, search, file store, queue and AI gateway. Long or retryable work goes to the worker. Graph calls respect `Retry-After`.
 9. **Tests:** cover every new policy rule and every service that writes data, asserting the audit and stage-event side effects. Run `npm run typecheck && npm run lint && npm test` before you push.
-10. **Scope:** finish P0 foundations before P1/P2 features. Don't build HRIS replacement or full onboarding (PRD non-goals).
+10. **Brand and design system:** every UI, module and career site follows `brand/BRAND.md` and uses the tokens in `brand/tokens.css` (Ivory / Warm Neutral / Black, Season Mix headings, Inter body). Don't hardcode colours or fonts in components; map them to the tokens. Accessibility (WCAG 2.1 AA) wins if a brand choice conflicts with it.
+11. **Scope:** finish P0 foundations before P1/P2 features. Don't build HRIS replacement or full onboarding (PRD non-goals).
 
 ## Before each commit, ask yourself
 
@@ -29,3 +30,5 @@ Read [PRD.md](PRD.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before yo
 - Is the change audited, and is the stage history intact?
 - Did I add personal data somewhere that retention and anonymization won't reach?
 - Did I make an architecture decision that isn't in ARCHITECTURE.md? If so, ask Kian and add it to the decision log.
+
+@AGENTS.md

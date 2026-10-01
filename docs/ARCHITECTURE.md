@@ -19,6 +19,7 @@ This document settles the open architecture choices in [PRD.md](../PRD.md) §8 a
 | D8 | **Search goes through a `SearchIndex` port.** Postgres full-text search or ILIKE is acceptable for now, with Azure AI Search later. Callers never write search SQL directly. | LOCKED |
 | D9 | **Files go through a `FileStore` port** (Azure Blob, plus SharePoint libraries for offer letters). The database stores metadata and a storage key, never file bytes. | LOCKED |
 | D10 | **Reporting reads from a separate store** (read replica or warehouse) once it exists (PRD §7.4). Report queries must never be added to request paths that touch the primary database in ways that could slow the app. | LOCKED |
+| D11 | **Design system on Purpose brand tokens.** `brand/tokens.css` is the single source for colour and type. Tailwind theme and components map to those tokens; brand guidance is in `brand/BRAND.md`. Per-brand career-site themes extend the tokens, they don't fork them. | LOCKED |
 
 ---
 
@@ -117,4 +118,5 @@ The PRD's MVP (Phase 1) includes SSO/SCIM, RBAC, audit, retention and consent. T
 
 | Date | Decision | By |
 |---|---|---|
+| 2026-10-01 | D11 added: UI built on `brand/tokens.css` and `brand/BRAND.md`. | Kian Chen |
 | 2026-10-01 | D1–D10 locked. Next.js full-stack TypeScript kept, with a mandatory service/policy layer, versioned migrations, and a worker plus REST API reusing the services. | Kian Chen |

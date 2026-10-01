@@ -1,0 +1,2 @@
+ALTER TABLE "scheduling_links" ADD COLUMN "claimed_at" timestamp with time zone;--> statement-breakpoint
+CREATE UNIQUE INDEX "scorecards_interview_author_uq" ON "scorecards" USING btree ("interview_id","author_id");
