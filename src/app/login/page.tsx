@@ -1,4 +1,5 @@
 import { asc } from "drizzle-orm";
+import { connection } from "next/server";
 import { db, schema } from "@/db";
 import { signInAs } from "@/server/actions/auth";
 import { Avatar } from "@/components/ui/avatar";
@@ -11,6 +12,7 @@ export const metadata = { title: "Sign in" };
 const ROLE_ORDER = ["admin", "recruiter", "coordinator", "hiring_manager", "interviewer", "executive"];
 
 export default async function LoginPage() {
+  await connection(); // render per request: user list and SSO status come from the DB/env
   const users = await db.query.users.findMany({ orderBy: asc(schema.users.name) });
   const grouped = ROLE_ORDER.map((role) => ({ role, users: users.filter((u) => u.role === role) })).filter((g) => g.users.length);
 

@@ -13,6 +13,7 @@ import {
   uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -500,3 +501,106 @@ export const integrationEvents = pgTable("integration_events", {
   response: jsonb("response").$type<Record<string, unknown>>().notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Relations (for db.query.* nested loading)
+// ---------------------------------------------------------------------------
+
+export const brandsRelations = relations(brands, ({ many }) => ({ jobs: many(jobs) }));
+
+export const usersRelations = relations(users, ({ one }) => ({
+  manager: one(users, { fields: [users.managerId], references: [users.id] }),
+}));
+
+export const jobsRelations = relations(jobs, ({ one, many }) => ({
+  brand: one(brands, { fields: [jobs.brandId], references: [brands.id] }),
+  department: one(departments, { fields: [jobs.departmentId], references: [departments.id] }),
+  location: one(locations, { fields: [jobs.locationId], references: [locations.id] }),
+  hiringManager: one(users, { fields: [jobs.hiringManagerId], references: [users.id], relationName: "jobHM" }),
+  recruiter: one(users, { fields: [jobs.recruiterId], references: [users.id], relationName: "jobRecruiter" }),
+  coordinator: one(users, { fields: [jobs.coordinatorId], references: [users.id], relationName: "jobCoordinator" }),
+  stages: many(jobStages),
+  openings: many(openings),
+  team: many(jobHiringTeam),
+  applications: many(applications),
+}));
+
+export const jobStagesRelations = relations(jobStages, ({ one }) => ({
+  job: one(jobs, { fields: [jobStages.jobId], references: [jobs.id] }),
+}));
+
+export const jobHiringTeamRelations = relations(jobHiringTeam, ({ one }) => ({
+  job: one(jobs, { fields: [jobHiringTeam.jobId], references: [jobs.id] }),
+  user: one(users, { fields: [jobHiringTeam.userId], references: [users.id] }),
+}));
+
+export const openingsRelations = relations(openings, ({ one }) => ({
+  job: one(jobs, { fields: [openings.jobId], references: [jobs.id] }),
+}));
+
+export const candidatesRelations = relations(candidates, ({ one, many }) => ({
+  owner: one(users, { fields: [candidates.ownerId], references: [users.id] }),
+  applications: many(applications),
+  activities: many(activities),
+  emails: many(emails),
+}));
+
+export const applicationsRelations = relations(applications, ({ one, many }) => ({
+  candidate: one(candidates, { fields: [applications.candidateId], references: [candidates.id] }),
+  job: one(jobs, { fields: [applications.jobId], references: [jobs.id] }),
+  stage: one(jobStages, { fields: [applications.stageId], references: [jobStages.id] }),
+  source: one(sources, { fields: [applications.sourceId], references: [sources.id] }),
+  creditedTo: one(users, { fields: [applications.creditedToId], references: [users.id], relationName: "appCredited" }),
+  referrer: one(users, { fields: [applications.referrerId], references: [users.id], relationName: "appReferrer" }),
+  archiveReason: one(archiveReasons, { fields: [applications.archiveReasonId], references: [archiveReasons.id] }),
+  interviews: many(interviews),
+  scorecards: many(scorecards),
+  offers: many(offers),
+  stageEvents: many(applicationStageEvents),
+}));
+
+export const applicationStageEventsRelations = relations(applicationStageEvents, ({ one }) => ({
+  application: one(applications, { fields: [applicationStageEvents.applicationId], references: [applications.id] }),
+}));
+
+export const activitiesRelations = relations(activities, ({ one }) => ({
+  candidate: one(candidates, { fields: [activities.candidateId], references: [candidates.id] }),
+  application: one(applications, { fields: [activities.applicationId], references: [applications.id] }),
+  actor: one(users, { fields: [activities.actorId], references: [users.id] }),
+}));
+
+export const interviewsRelations = relations(interviews, ({ one, many }) => ({
+  application: one(applications, { fields: [interviews.applicationId], references: [applications.id] }),
+  stage: one(jobStages, { fields: [interviews.stageId], references: [jobStages.id] }),
+  feedbackForm: one(feedbackForms, { fields: [interviews.feedbackFormId], references: [feedbackForms.id] }),
+  interviewers: many(interviewInterviewers),
+  scorecards: many(scorecards),
+}));
+
+export const interviewInterviewersRelations = relations(interviewInterviewers, ({ one }) => ({
+  interview: one(interviews, { fields: [interviewInterviewers.interviewId], references: [interviews.id] }),
+  user: one(users, { fields: [interviewInterviewers.userId], references: [users.id] }),
+}));
+
+export const scorecardsRelations = relations(scorecards, ({ one }) => ({
+  application: one(applications, { fields: [scorecards.applicationId], references: [applications.id] }),
+  interview: one(interviews, { fields: [scorecards.interviewId], references: [interviews.id] }),
+  author: one(users, { fields: [scorecards.authorId], references: [users.id] }),
+}));
+
+export const offersRelations = relations(offers, ({ one, many }) => ({
+  application: one(applications, { fields: [offers.applicationId], references: [applications.id] }),
+  opening: one(openings, { fields: [offers.openingId], references: [openings.id] }),
+  createdBy: one(users, { fields: [offers.createdById], references: [users.id] }),
+  approvals: many(offerApprovals),
+}));
+
+export const offerApprovalsRelations = relations(offerApprovals, ({ one }) => ({
+  offer: one(offers, { fields: [offerApprovals.offerId], references: [offers.id] }),
+  approver: one(users, { fields: [offerApprovals.approverId], references: [users.id] }),
+}));
+
+export const emailsRelations = relations(emails, ({ one }) => ({
+  candidate: one(candidates, { fields: [emails.candidateId], references: [candidates.id] }),
+  sentBy: one(users, { fields: [emails.sentById], references: [users.id] }),
+}));

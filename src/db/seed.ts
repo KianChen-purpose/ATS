@@ -467,7 +467,7 @@ async function main() {
           externalEventId: `AAMkAG${faker.string.alphanumeric(16)}`,
           status: upcoming ? "scheduled" : "completed",
           createdById: pick(coordinators).id,
-          createdAt: new Date(start.getTime() - 3 * DAY),
+          createdAt: new Date(Math.min(now - 3_600_000, start.getTime() - 3 * DAY)),
         })
         .returning();
       await db.insert(s.interviewInterviewers).values(panel.map((u) => ({ interviewId: iv.id, userId: u.id })));
@@ -584,6 +584,11 @@ async function main() {
     }
 
     await db.insert(s.applicationStageEvents).values(events);
+    // Nothing in the timeline can be in the future (e.g. "scheduled" activity for an upcoming interview).
+    for (const a of acts) {
+      const t = (a.createdAt as Date).getTime();
+      if (t > now) a.createdAt = new Date(now - faker.number.int({ min: 1, max: 48 }) * 3_600_000);
+    }
     await db.insert(s.activities).values(acts);
   }
 
