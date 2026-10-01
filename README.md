@@ -23,7 +23,9 @@ npm run db:reset            # apply migrations + load demo data
 npm run dev                 # http://localhost:3000
 ```
 
-Sign in from the demo login screen as any seeded user. Each role (admin, recruiter, coordinator, hiring manager, interviewer, executive) sees a different home page.
+With `PATS_DEMO_AUTH=true` (the `.env.example` default), sign in from the demo login screen as any seeded user. Each role (admin, recruiter, coordinator, hiring manager, interviewer, executive) sees a different home page.
+
+Demo sign-in only works outside production: the server refuses to start if `PATS_DEMO_AUTH=true` with `NODE_ENV=production`, or if `SESSION_SECRET` is missing, shorter than 32 characters or still the example value.
 
 ## Scripts
 

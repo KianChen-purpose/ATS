@@ -5,9 +5,10 @@ import { SignJWT, jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
 import { cache } from "react";
 import { db, schema } from "@/db";
+import { sessionSecret } from "@/server/config";
 
 export const SESSION_COOKIE = "pats_session";
-const secret = () => new TextEncoder().encode(process.env.SESSION_SECRET ?? "pats-dev-secret-change-me");
+const secret = () => sessionSecret();
 
 export async function createSession(userId: string) {
   const token = await new SignJWT({ sub: userId })
