@@ -61,7 +61,7 @@ export async function getCandidateProfile(user: CurrentUser, candidateId: string
 export type CandidateProfile = NonNullable<Awaited<ReturnType<typeof getCandidateProfile>>>;
 
 export async function getProfileOptions(user: CurrentUser) {
-  const [archiveReasons, templates, jobs] = await Promise.all([
+  const [archiveReasons, templates, jobs, forms] = await Promise.all([
     db.query.archiveReasons.findMany(),
     db.query.emailTemplates.findMany({ orderBy: asc(s.emailTemplates.name) }),
     db
@@ -70,8 +70,10 @@ export async function getProfileOptions(user: CurrentUser) {
       .innerJoin(s.brands, eq(s.brands.id, s.jobs.brandId))
       .where(and(visibleJobsFilter(user), inArray(s.jobs.status, ["open", "on_hold"])))
       .orderBy(asc(s.jobs.title)),
+    db.query.feedbackForms.findMany(),
   ]);
-  return { archiveReasons, templates, jobs };
+  const attributeLabels = Object.fromEntries(forms.flatMap((f) => f.attributes.map((a) => [a.key, a.label])));
+  return { archiveReasons, templates, jobs, attributeLabels };
 }
 
 export type CandidateListFilters = {

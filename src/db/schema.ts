@@ -399,6 +399,24 @@ export const scorecards = pgTable(
   (t) => [index("scorecards_app_idx").on(t.applicationId)],
 );
 
+/** Candidate self-scheduling: a tokenized link that lets the candidate pick a slot. */
+export const schedulingLinks = pgTable("scheduling_links", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  token: text("token").notNull().unique(),
+  applicationId: uuid("application_id")
+    .notNull()
+    .references(() => applications.id, { onDelete: "cascade" }),
+  stageId: uuid("stage_id").references(() => jobStages.id),
+  interviewerIds: uuid("interviewer_ids").array().notNull(),
+  durationMinutes: integer("duration_minutes").notNull().default(45),
+  /** Window the candidate can pick from. */
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
+  createdById: uuid("created_by_id").references(() => users.id),
+  bookedInterviewId: uuid("booked_interview_id").references(() => interviews.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Offers
 // ---------------------------------------------------------------------------
@@ -603,4 +621,10 @@ export const offerApprovalsRelations = relations(offerApprovals, ({ one }) => ({
 export const emailsRelations = relations(emails, ({ one }) => ({
   candidate: one(candidates, { fields: [emails.candidateId], references: [candidates.id] }),
   sentBy: one(users, { fields: [emails.sentById], references: [users.id] }),
+}));
+
+export const schedulingLinksRelations = relations(schedulingLinks, ({ one }) => ({
+  application: one(applications, { fields: [schedulingLinks.applicationId], references: [applications.id] }),
+  stage: one(jobStages, { fields: [schedulingLinks.stageId], references: [jobStages.id] }),
+  createdBy: one(users, { fields: [schedulingLinks.createdById], references: [users.id] }),
 }));

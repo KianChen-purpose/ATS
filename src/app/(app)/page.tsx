@@ -75,7 +75,7 @@ export default async function HomePage() {
                     <div className="font-medium">{f.firstName} {f.lastName}</div>
                     <div className="truncate text-xs text-zinc-500">{f.title.split(" – ")[0]} · {timeAgo(f.startAt)}</div>
                   </div>
-                  <Link href={`/candidates/${f.candidateId}?feedback=${f.id}`} className="rounded-md bg-accent-600 px-2 py-1 text-xs font-medium text-white hover:bg-accent-700">
+                  <Link href={`/interviews/${f.id}/feedback`} className="rounded-md bg-accent-600 px-2 py-1 text-xs font-medium text-white hover:bg-accent-700">
                     Submit feedback
                   </Link>
                 </li>

@@ -13,11 +13,14 @@ import { NoteComposer } from "./note-composer";
 import { TagEditor } from "./tag-editor";
 import { AddToJob } from "./add-to-job";
 import { ActivityFeed, PersonChip } from "./activity-feed";
+import { InterviewRowActions } from "./interview-row-actions";
+import { DebriefMatrix } from "./debrief-matrix";
 
 type Options = {
   archiveReasons: { id: string; name: string; category: string }[];
   templates: { id: string; name: string; subject: string; body: string }[];
   jobs: { id: string; title: string; brand: string }[];
+  attributeLabels: Record<string, string>;
 };
 
 export function CandidateProfileView({
@@ -46,6 +49,7 @@ export function CandidateProfileView({
   const allInterviews = c.applications.flatMap((a) => a.interviews.map((iv) => ({ ...iv, jobTitle: a.job.title, scorecards: a.scorecards.filter((sc) => sc.interviewId === iv.id) })));
   const offers = c.applications.flatMap((a) => a.offers.map((o) => ({ ...o, jobTitle: a.job.title })));
   const hiddenFeedback = c.applications.reduce((n, a) => n + a.feedbackHidden, 0);
+  const now = new Date();
 
   return (
     <div className="bg-white">
@@ -147,6 +151,11 @@ export function CandidateProfileView({
                     <EyeOff size={14} /> {hiddenFeedback} scorecard(s) hidden until you submit your own feedback.
                   </div>
                 )}
+                {c.applications
+                  .filter((a) => a.scorecards.length > 1 && !a.feedbackHidden)
+                  .map((a) => (
+                    <DebriefMatrix key={a.id} scorecards={a.scorecards} attributeLabels={options.attributeLabels} jobTitle={a.job.title} />
+                  ))}
                 {allScorecards.length === 0 ? (
                   <EmptyState title="No feedback yet" />
                 ) : (
@@ -164,7 +173,7 @@ export function CandidateProfileView({
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {Object.entries(sc.ratings).map(([k, v]) => (
                           <span key={k} className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] text-zinc-700">
-                            {k.replace(/_/g, " ")}: <strong>{v}</strong>/4
+                            {options.attributeLabels[k] ?? k.replace(/_/g, " ")}: <strong>{v}</strong>/4
                           </span>
                         ))}
                       </div>
@@ -197,7 +206,7 @@ export function CandidateProfileView({
                             {iv.interviewers.map((i) => i.user.name).join(", ")} · {iv.jobTitle}
                           </div>
                         </div>
-                        {iv.status === "scheduled" && iv.startAt > new Date() ? (
+                        {iv.status === "scheduled" && iv.startAt > now ? (
                           iv.meetingUrl && (
                             <a href={iv.meetingUrl} target="_blank" className="inline-flex items-center gap-1 rounded-md bg-[#5b5fc7] px-2 py-1 text-xs font-medium text-white">
                               <Video size={12} /> Teams
@@ -209,6 +218,17 @@ export function CandidateProfileView({
                           <Badge tone={iv.scorecards.length >= iv.interviewers.length ? "green" : "amber"}>
                             {iv.scorecards.length}/{iv.interviewers.length} feedback
                           </Badge>
+                        )}
+                        {iv.status !== "cancelled" && (
+                          <InterviewRowActions
+                            interviewId={iv.id}
+                            candidateId={c.id}
+                            applicationId={iv.applicationId}
+                            upcoming={iv.startAt > now}
+                            canManage={canManage}
+                            canSubmitFeedback={iv.startAt <= now && iv.interviewers.some((i) => i.userId === user.id) && !iv.scorecards.some((sc) => sc.authorId === user.id)}
+                            missingFeedback={iv.scorecards.length < iv.interviewers.length}
+                          />
                         )}
                       </li>
                     ))}

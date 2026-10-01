@@ -18,6 +18,7 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 async function reset() {
   const tables = [
     "integration_events",
+    "scheduling_links",
     "audit_logs",
     "emails",
     "email_templates",
@@ -224,10 +225,10 @@ async function main() {
       {
         name: "Standard Interview Scorecard",
         attributes: [
-          { key: "role_skills", label: "Role-specific skills" },
-          { key: "problem_solving", label: "Problem solving" },
-          { key: "communication", label: "Communication" },
-          { key: "values", label: "Purpose values alignment" },
+          { key: "role_skills", label: "Role-specific skills", description: "Depth of knowledge and hands-on experience for this role." },
+          { key: "problem_solving", label: "Problem solving", description: "Structures ambiguous problems, weighs trade-offs, reaches sound conclusions." },
+          { key: "communication", label: "Communication", description: "Clear, concise, adapts to the audience, listens well." },
+          { key: "values", label: "Purpose values alignment", description: "Participation, ownership, client-first thinking." },
         ],
       },
     ])

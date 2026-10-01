@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArchiveRestore, ChevronDown, ChevronRight, Mail, Archive } from "lucide-react";
+import Link from "next/link";
+import { ArchiveRestore, CalendarPlus, ChevronDown, ChevronRight, Mail, Archive } from "lucide-react";
+import { buttonClass } from "@/components/ui/button";
 import { Button } from "@/components/ui/button";
 import { Modal, inputClass, labelClass } from "@/components/ui/modal";
 import { archiveApplications, moveToStage, sendCandidateEmail, unarchiveApplication } from "@/server/actions/applications";
@@ -75,6 +77,9 @@ export function ApplicationActions(ctx: ActionContext) {
               </div>
             )}
           </div>
+          <Link href={`/candidates/${ctx.candidate.id}/schedule?app=${app.id}`} className={buttonClass("secondary")}>
+            <CalendarPlus size={14} /> Schedule
+          </Link>
           <Button disabled={pending} onClick={() => setArchiveOpen(true)}>
             <Archive size={14} /> Archive
           </Button>

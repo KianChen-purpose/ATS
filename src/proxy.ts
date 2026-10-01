@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const SESSION_COOKIE = "pats_session";
 // Candidate-facing and auth routes don't need a staff session.
-const PUBLIC_PREFIXES = ["/login", "/careers", "/api/public", "/_next", "/favicon"];
+const PUBLIC_PREFIXES = ["/login", "/careers", "/schedule", "/api/public", "/_next", "/favicon"];
 
 /** Optimistic check only: real verification happens in requireUser(). */
 export function proxy(request: NextRequest) {

@@ -8,6 +8,7 @@ import { requireUser } from "@/lib/session";
 import { audit } from "@/server/audit";
 import { canManageRecruiting } from "@/server/permissions";
 import { m365 } from "@/server/integrations/m365";
+import { sendAndLogEmail } from "@/server/email";
 
 async function requireRecruiter() {
   const user = await requireUser();
@@ -150,19 +151,7 @@ async function deliverEmail(
 ) {
   const candidate = await db.query.candidates.findFirst({ where: eq(s.candidates.id, candidateId) });
   if (!candidate?.email) throw new Error("Candidate has no email address");
-  const sent = await m365().mail.send({ from: user.email, to: candidate.email, subject, body });
-  await db.insert(s.emails).values({
-    candidateId,
-    direction: "outbound",
-    fromAddress: user.email,
-    toAddress: candidate.email,
-    subject,
-    body,
-    sentById: user.id,
-    externalMessageId: sent.messageId,
-    externalThreadId: sent.threadId,
-  });
-  await db.insert(s.activities).values({ candidateId, applicationId, type: "email", actorId: user.id, body: `Emailed: ${subject}` });
+  await sendAndLogEmail({ candidateId, applicationId, from: user.email, to: candidate.email, subject, body, sentById: user.id });
 }
 
 export async function sendCandidateEmail(input: { candidateId: string; applicationId: string | null; subject: string; body: string }) {
