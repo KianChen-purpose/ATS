@@ -38,13 +38,15 @@ export function Scheduler(props: {
   const [linkDays, setLinkDays] = useState(7);
   const [linkUrl, setLinkUrl] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  // Captured once so render stays pure; the page is short-lived.
+  const [now] = useState(() => Date.now());
 
   // Monday of the visible week, in Toronto time.
   const weekStart = useMemo(() => {
-    const now = new TZDate(Date.now(), DEFAULT_TZ);
-    const dow = (now.getDay() + 6) % 7;
-    return new TZDate(now.getFullYear(), now.getMonth(), now.getDate() - dow + weekOffset * 7, 0, 0, 0, DEFAULT_TZ);
-  }, [weekOffset]);
+    const today = new TZDate(now, DEFAULT_TZ);
+    const dow = (today.getDay() + 6) % 7;
+    return new TZDate(today.getFullYear(), today.getMonth(), today.getDate() - dow + weekOffset * 7, 0, 0, 0, DEFAULT_TZ);
+  }, [weekOffset, now]);
   const days = useMemo(() => businessDays(weekStart, 7), [weekStart]);
 
   useEffect(() => {
@@ -58,7 +60,6 @@ export function Scheduler(props: {
     setSelected(null);
     setInterviewerIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
-  const stage = props.stages.find((s) => s.id === stageId);
   const people = props.people.filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()));
 
   const confirm = () =>
@@ -211,7 +212,7 @@ export function Scheduler(props: {
             </div>
           ))}
           {slotsForDay(days[0], 30).map((row, ri) => (
-            <Row key={ri} rowIndex={ri} label={fmt(row.start, "h:mm a")} days={days} duration={duration} busy={visibleBusy} nameById={nameById} selected={selected} onSelect={setSelected} enabled={mode === "pick"} />
+            <Row key={ri} rowIndex={ri} label={fmt(row.start, "h:mm a")} days={days} duration={duration} busy={visibleBusy} nameById={nameById} selected={selected} onSelect={setSelected} enabled={mode === "pick"} now={now} />
           ))}
         </div>
       </div>
@@ -229,7 +230,9 @@ function Row({
   selected,
   onSelect,
   enabled,
+  now,
 }: {
+  now: number;
   rowIndex: number;
   label: string;
   days: TZDate[];
@@ -249,7 +252,7 @@ function Row({
         const full = { start: slot.start, end: new Date(slot.start.getTime() + duration * 60_000) };
         const endOfDay = slotsForDay(d, 30).at(-1)!.end;
         const fits = full.end <= endOfDay;
-        const past = slot.start.getTime() < Date.now();
+        const past = slot.start.getTime() < now;
         const who = busyPeople(full, busy);
         const isSel = selected?.getTime() === slot.start.getTime();
         const tone = !fits || past ? "bg-zinc-50" : people === 0 ? "bg-white" : who.length === 0 ? "bg-emerald-50 hover:bg-emerald-100" : who.length < people ? "bg-amber-50 hover:bg-amber-100" : "bg-zinc-100 hover:bg-zinc-200";
