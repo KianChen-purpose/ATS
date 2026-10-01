@@ -1,6 +1,15 @@
 # PATS — Purpose Applicant Tracking System
 
-Purpose Unlimited's in-house recruiting platform, built to match Ashby's feature set and run natively on Microsoft 365. See [PRD.md](PRD.md) for the full product requirements.
+Purpose Unlimited's in-house recruiting platform: Ashby-grade recruiting, built for Purpose, running on Microsoft 365.
+
+## Foundation documents
+
+| Document | What it covers |
+|---|---|
+| [PRD.md](PRD.md) | Product requirements: features, priorities, M365 integration, reporting, roadmap |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Locked architecture decisions and invariants (binding) |
+| [CLAUDE.md](CLAUDE.md) | Rules every contributor and Claude session checks each change against |
+| [brand/BRAND.md](brand/BRAND.md) | Brand guidelines; tokens in [brand/tokens.css](brand/tokens.css) |
 
 ## Quick start
 
@@ -10,7 +19,7 @@ Requirements: Node 20+, PostgreSQL 16 (or Docker).
 cp .env.example .env
 docker compose up -d        # or use a local Postgres matching DATABASE_URL
 npm install
-npm run db:reset            # create tables + load demo data
+npm run db:reset            # apply migrations + load demo data
 npm run dev                 # http://localhost:3000
 ```
 
@@ -47,13 +56,16 @@ src/
 
 ## Build phases
 
+Per [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §10, foundation hardening comes before any further feature phase.
+
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Foundation: schema, demo data, app shell, ⌘K, demo auth, M365 integration layer | ✅ |
 | 1 | Core ATS: jobs, pipeline board/table, candidate profiles, notes, stage moves, archive | ✅ |
-| 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards, interviews hub | ✅ |
-| 3 | Offers, approvals, headcount & openings, Word offer letters | ⏳ |
+| 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards, interviews hub | ✅ (built; being moved onto the service layer) |
+| **H** | **Foundation hardening:** service and policy layers, authorization fixes, audit (incl. view logging), immutable history, versioned migrations, demo-auth guard, consent/retention schema, tests and CI | 🚧 now |
+| 3 | Offers, approvals, headcount & openings, Word offer letters | ⏳ after H |
 | 4 | Career sites (multi-brand, EN/FR), applications, referrals, sourcing & CRM | ⏳ |
 | 5 | Reporting: standard reports, custom builder, Excel/Power BI | ⏳ |
-| 6 | Live M365: Entra SSO/SCIM, Graph mail sync, Teams app & approvals | ⏳ |
+| 6 | Live M365: Entra SSO/SCIM, Graph mail sync, Teams app & approvals (SSO can go live earlier, once tenant consent is ready) | ⏳ |
 | 7 | AI assist: application review, notes, summaries, drafting | ⏳ |
