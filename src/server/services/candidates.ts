@@ -15,7 +15,7 @@ import {
   type UserActor,
 } from "@/server/policy";
 import { searchIndex } from "@/server/integrations/search";
-import { recordAudit } from "./audit";
+import { recordAudit, recordView } from "./audit";
 import { listPickableJobs } from "./jobs";
 
 // ---------------------------------------------------------------------------
@@ -78,6 +78,16 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
 }
 
 export type CandidateProfile = NonNullable<Awaited<ReturnType<typeof getCandidateProfile>>>;
+
+/**
+ * Load a candidate profile for display and audit the view (the profile includes the resume).
+ * Use this from pages; getCandidateProfile is for internal reads that don't show the profile.
+ */
+export async function viewCandidateProfile(actor: UserActor, candidateId: string, via: "profile" | "job_panel" | "scheduler") {
+  const profile = await getCandidateProfile(actor, candidateId);
+  if (profile) await recordView(db, actor, "candidate.viewed", "candidate", candidateId, { via, includesResume: Boolean(profile.resumeText) });
+  return profile;
+}
 
 /** Throws NotFound unless the actor can see the candidate (ARCHITECTURE.md §3.3). */
 export async function assertCanSeeCandidate(actor: UserActor, candidateId: string) {

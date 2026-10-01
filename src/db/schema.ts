@@ -509,9 +509,13 @@ export const auditLogs = pgTable(
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    /** Request correlation (ARCHITECTURE.md §4.2). Null for system actors. */
+    requestId: text("request_id"),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("audit_entity_idx").on(t.entityType, t.entityId)],
+  (t) => [index("audit_entity_idx").on(t.entityType, t.entityId), index("audit_actor_idx").on(t.actorId, t.createdAt)],
 );
 
 /** Every call PATS makes to Microsoft 365 (real or mocked), so the demo can show integration traffic. */

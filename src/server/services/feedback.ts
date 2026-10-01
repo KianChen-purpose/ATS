@@ -5,7 +5,7 @@ import { db, schema as s } from "@/db";
 import { RECOMMENDATION_LABELS } from "@/lib/utils";
 import { m365 } from "@/server/integrations/m365";
 import { assertCanSeeJobs, ForbiddenError, NotFoundError, requireUserActor, type Actor, type UserActor } from "@/server/policy";
-import { recordAudit } from "./audit";
+import { recordAudit, recordView } from "./audit";
 
 /** The scorecard page: only panel members of the interview may open it. */
 export async function getFeedbackPage(actor: UserActor, interviewId: string) {
@@ -25,6 +25,10 @@ export async function getFeedbackPage(actor: UserActor, interviewId: string) {
     return null;
   }
   const mine = await db.query.scorecards.findFirst({ where: and(eq(s.scorecards.interviewId, iv.id), eq(s.scorecards.authorId, actor.id)) });
+  // The scorecard page shows the candidate's resume alongside the form.
+  if (iv.application.candidate.resumeText) {
+    await recordView(db, actor, "resume.viewed", "candidate", iv.application.candidateId, { via: "scorecard", interviewId: iv.id });
+  }
   return { interview: iv, mine };
 }
 

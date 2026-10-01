@@ -1,5 +1,5 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { SignJWT, jwtVerify } from "jose";
 import { eq } from "drizzle-orm";
@@ -50,7 +50,13 @@ export async function requireUser() {
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 
 /** The signed-in user as a policy actor, for passing to services. Redirects to /login if signed out. */
-export async function requireActor() {
+export const requireActor = cache(async () => {
   const { userActor } = await import("@/server/policy/actor");
-  return userActor(await requireUser());
-}
+  const user = await requireUser();
+  const h = await headers();
+  return userActor(user, {
+    requestId: h.get("x-request-id") ?? h.get("x-ms-request-id") ?? crypto.randomUUID(),
+    ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip") || null,
+    userAgent: h.get("user-agent")?.slice(0, 500) ?? null,
+  });
+});

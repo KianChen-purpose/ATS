@@ -25,9 +25,8 @@ export const mockM365: M365Client = {
         service: "mail",
         operation: "sendMail",
         mode: "mock",
-        summary: `Sent "${input.subject}" from ${input.from} to ${input.to}`,
-        request: { ...input },
-        response: res,
+        recipients: [input.to, ...(input.cc ?? [])],
+        ids: res,
       });
       return res;
     },
@@ -76,8 +75,7 @@ export const mockM365: M365Client = {
         service: "calendar",
         operation: "getSchedule",
         mode: "mock",
-        summary: `Fetched free/busy for ${emails.length} people`,
-        request: { emails, start: start.toISOString(), end: end.toISOString() },
+        recipients: emails,
       });
       return result;
     },
@@ -91,9 +89,9 @@ export const mockM365: M365Client = {
         service: "calendar",
         operation: "createEvent",
         mode: "mock",
-        summary: `Created "${input.subject}" for ${input.attendees.length} attendees${input.teamsMeeting ? " with Teams meeting" : ""}`,
-        request: { ...input, start: input.start.toISOString(), end: input.end.toISOString() },
-        response: res,
+        recipients: input.attendees.map((a) => a.email),
+        counts: { teamsMeeting: input.teamsMeeting ? 1 : 0 },
+        ids: { eventId: res.eventId },
       });
       return res;
     },
@@ -102,8 +100,8 @@ export const mockM365: M365Client = {
         service: "calendar",
         operation: "cancelEvent",
         mode: "mock",
-        summary: `Cancelled event ${eventId.slice(0, 14)}… on ${organizer}'s calendar`,
-        request: { organizer, eventId, comment },
+        recipients: [organizer],
+        ids: { eventId },
       });
     },
   },
@@ -113,8 +111,7 @@ export const mockM365: M365Client = {
         service: "teams",
         operation: "sendActivityNotification",
         mode: "mock",
-        summary: `Teams → ${n.toEmail}: ${n.title}`,
-        request: { ...n },
+        recipients: [n.toEmail],
       });
     },
   },

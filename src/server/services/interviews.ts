@@ -15,7 +15,7 @@ import {
   type UserActor,
 } from "@/server/policy";
 import { recordAudit } from "./audit";
-import { getCandidateProfile } from "./candidates";
+import { viewCandidateProfile } from "./candidates";
 import { sendAndLogEmail } from "./email";
 
 const SENDER_MAILBOX = () => process.env.M365_SENDER_MAILBOX ?? "careers@purpose.demo";
@@ -153,7 +153,7 @@ export type InterviewListRow = Awaited<ReturnType<typeof listInterviews>>[number
 /** Everything the scheduling screen needs, or null if the actor can't schedule for this candidate. */
 export async function getSchedulerData(actor: UserActor, candidateId: string, applicationId?: string, replaceInterviewId?: string) {
   if (!canManageRecruiting(actor)) return null;
-  const profile = await getCandidateProfile(actor, candidateId);
+  const profile = await viewCandidateProfile(actor, candidateId, "scheduler");
   if (!profile) return null;
   const app = profile.applications.find((a) => a.id === applicationId) ?? profile.applications.find((a) => a.status === "active");
   if (!app) return null;

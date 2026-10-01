@@ -4,7 +4,7 @@ import { ExternalLink, LayoutGrid, Lock, Plus, Rows3, X } from "lucide-react";
 import { buttonClass } from "@/components/ui/button";
 import { requireActor } from "@/lib/session";
 import { getJobDetail, getPipeline, pipelineCounts } from "@/server/services/jobs";
-import { getCandidateProfile, getProfileOptions } from "@/server/services/candidates";
+import { getProfileOptions, viewCandidateProfile } from "@/server/services/candidates";
 import { canManageRecruiting } from "@/server/policy";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterTabs } from "@/components/ui/filter-tabs";
@@ -49,7 +49,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
 
   const [apps, counts, options] = await Promise.all([getPipeline(user, id, status), pipelineCounts(user, id), getProfileOptions(user)]);
   const panelCandidateId = str("c");
-  const panelProfile = panelCandidateId ? await getCandidateProfile(user, panelCandidateId) : null;
+  const panelProfile = panelCandidateId ? await viewCandidateProfile(user, panelCandidateId, "job_panel") : null;
 
   const href = (next: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
