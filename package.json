@@ -12,7 +12,9 @@
     "db:check": "drizzle-kit check && drizzle-kit generate --name drift-check && git diff --exit-code --stat -- drizzle && test -z \"$(git ls-files --others --exclude-standard drizzle)\"",
     "db:seed": "tsx src/db/seed.ts",
     "db:reset": "tsx src/db/migrate.ts --reset && npm run db:seed",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
@@ -45,6 +47,7 @@
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }

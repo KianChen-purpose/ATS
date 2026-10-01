@@ -35,6 +35,7 @@ Sign in from the demo login screen as any seeded user. Each role (admin, recruit
 | `npm run db:check` | Fail if the schema has changes with no committed migration (CI) |
 | `npm run db:seed` | Wipe and reload demo data (deterministic) |
 | `npm run db:reset` | Local only: drop the database, migrate from scratch, reseed |
+| `npm test` | Run the test suite (vitest) against a throwaway `pats_test` Postgres database, built from the migrations |
 | `npm run typecheck` / `npm run lint` | Checks |
 
 ## Microsoft 365
