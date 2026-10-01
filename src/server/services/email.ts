@@ -27,6 +27,7 @@ export async function sendAndLogEmail(
       .insert(s.emails)
       .values({
         candidateId: opts.candidateId,
+        applicationId: opts.applicationId,
         direction: "outbound",
         fromAddress: opts.from,
         toAddress: opts.to,

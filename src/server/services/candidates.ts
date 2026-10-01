@@ -14,6 +14,7 @@ import {
   type Actor,
   type UserActor,
 } from "@/server/policy";
+import { searchIndex } from "@/server/integrations/search";
 import { recordAudit } from "./audit";
 import { listPickableJobs } from "./jobs";
 
@@ -66,10 +67,13 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
     };
   });
 
+  // Rows tied to a job follow that job's visibility; candidate-level rows are for prospect roles only (§3.7).
+  const visibleRow = (applicationId: string | null) => (applicationId ? visibleAppIds.has(applicationId) : canSeeProspects(actor));
   return {
     ...candidate,
     applications,
-    activities: candidate.activities.filter((act) => !act.applicationId || visibleAppIds.has(act.applicationId)),
+    activities: candidate.activities.filter((act) => visibleRow(act.applicationId)),
+    emails: candidate.emails.filter((e) => visibleRow(e.applicationId)),
   };
 }
 
@@ -124,17 +128,7 @@ export async function listCandidates(actor: UserActor, f: CandidateListFilters) 
     sql`EXISTS (SELECT 1 FROM applications a WHERE a.candidate_id = ${s.candidates.id} AND a.job_id IN (${jobIds})
         ${appConds.length ? sql`AND ${sql.join(appConds, sql` AND `)}` : sql``})`,
   ];
-  if (f.q) {
-    const like = `%${f.q}%`;
-    where.push(sql`(
-      (${s.candidates.firstName} || ' ' || ${s.candidates.lastName}) ILIKE ${like}
-      OR ${s.candidates.email} ILIKE ${like}
-      OR ${s.candidates.currentCompany} ILIKE ${like}
-      OR ${s.candidates.currentTitle} ILIKE ${like}
-      OR array_to_string(${s.candidates.tags}, ' ') ILIKE ${like}
-      OR ${s.candidates.resumeText} ILIKE ${like}
-    )`);
-  }
+  if (f.q) where.push(searchIndex().candidateTextFilter(f.q, { includeResume: true }));
   const page = Math.max(1, f.page ?? 1);
   // Drizzle renders columns unqualified inside single-table selects; qualify explicitly for correlated subqueries.
   const candId = sql.raw(`"candidates"."id"`);

@@ -1,11 +1,19 @@
 import { getPublicSchedulingPage } from "@/server/services/scheduling-links";
+import { PUBLIC_LIMITS, RateLimitError, rateLimit } from "@/server/security/rate-limit";
+import { clientIp } from "@/server/security/request";
 import { SelfSchedule } from "@/components/scheduling/self-schedule";
 
 export const metadata = { title: "Schedule your interview", robots: { index: false } };
 
 export default async function SelfSchedulePage(props: PageProps<"/schedule/[token]">) {
   const { token } = await props.params;
-  const page = await getPublicSchedulingPage(token);
+  let limited = false;
+  try {
+    rateLimit(`view:${await clientIp()}`, PUBLIC_LIMITS.view);
+  } catch (e) {
+    if (!(e instanceof RateLimitError)) throw e;
+    limited = true;
+  }
 
   const shell = (children: React.ReactNode, brand?: { name: string; primaryColor: string }) => (
     <div className="min-h-full bg-zinc-50 px-4 py-10">
@@ -21,6 +29,8 @@ export default async function SelfSchedulePage(props: PageProps<"/schedule/[toke
     </div>
   );
 
+  if (limited) return shell(<p className="text-center text-zinc-600">Too many requests. Please wait a few minutes and try again.</p>);
+  const page = await getPublicSchedulingPage(token);
   if (page.state === "invalid") return shell(<p className="text-center text-zinc-600">This scheduling link isn&apos;t valid.</p>);
   if (page.state === "booked") return shell(<p className="text-center text-zinc-600">This interview has already been scheduled. Check your email for the details.</p>, page.brand);
   if (page.state === "expired") return shell(<p className="text-center text-zinc-600">This link has expired. Please reply to your recruiter for a new one.</p>, page.brand);

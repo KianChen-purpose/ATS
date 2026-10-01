@@ -1,5 +1,5 @@
 import "server-only";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema as s } from "@/db";
@@ -10,6 +10,11 @@ import { assertCanSeeJobs, NotFoundError, requireRecruiting, systemActor, type A
 import { recordAudit } from "./audit";
 import { sendAndLogEmail } from "./email";
 import { bookInterviewCore, SENDER_MAILBOX } from "./interviews";
+
+/** Links are looked up by the SHA-256 of their token; the token itself is never stored. */
+export function hashToken(token: string) {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
 
 export const linkSchema = z.object({
   applicationId: z.string().uuid(),
@@ -30,13 +35,13 @@ export async function createSchedulingLink(actor: Actor, d: z.output<typeof link
   if (!app) throw new NotFoundError("Application");
   await assertCanSeeJobs(actor, [app.jobId]);
 
-  const token = randomBytes(18).toString("base64url");
+  const token = randomBytes(32).toString("base64url"); // 256 bits
   const windowStart = new Date();
   const windowEnd = new Date(windowStart.getTime() + d.days * 86_400_000);
   await db.transaction(async (tx) => {
     const [link] = await tx
       .insert(s.schedulingLinks)
-      .values({ token, applicationId: d.applicationId, stageId: d.stageId, interviewerIds: d.interviewerIds, durationMinutes: d.durationMin, windowStart, windowEnd, createdById: user.id })
+      .values({ tokenHash: hashToken(token), applicationId: d.applicationId, stageId: d.stageId, interviewerIds: d.interviewerIds, durationMinutes: d.durationMin, windowStart, windowEnd, createdById: user.id })
       .returning({ id: s.schedulingLinks.id });
     await recordAudit(tx, actor, "scheduling_link.created", "scheduling_link", link.id, { applicationId: d.applicationId });
   });
@@ -76,8 +81,9 @@ export type PublicSchedulingPage =
     };
 
 export async function getPublicSchedulingPage(token: string): Promise<PublicSchedulingPage> {
+  if (!TOKEN_RE.test(token)) return { state: "invalid" };
   const link = await db.query.schedulingLinks.findFirst({
-    where: eq(s.schedulingLinks.token, token),
+    where: eq(s.schedulingLinks.tokenHash, hashToken(token)),
     with: { stage: true, application: { with: { candidate: true, job: { with: { brand: true } } } } },
   });
   if (!link) return { state: "invalid" };
@@ -104,13 +110,14 @@ async function openSlots(link: typeof s.schedulingLinks.$inferSelect) {
   return commonFreeSlots({ busy, from, days, durationMin: link.durationMinutes }).map((x) => x.start.toISOString());
 }
 
-export const bookLinkSchema = z.object({ token: z.string().min(16).max(128), startISO: z.string().datetime() });
+const TOKEN_RE = /^[A-Za-z0-9_-]{24,64}$/;
+export const bookLinkSchema = z.object({ token: z.string().regex(TOKEN_RE), startISO: z.string().datetime() });
 
 /** Candidate books a slot from their link. */
 export async function bookSchedulingLink(d: z.output<typeof bookLinkSchema>) {
   const actor = systemActor("self_scheduling");
   const link = await db.query.schedulingLinks.findFirst({
-    where: and(eq(s.schedulingLinks.token, d.token), isNull(s.schedulingLinks.claimedAt)),
+    where: and(eq(s.schedulingLinks.tokenHash, hashToken(d.token)), isNull(s.schedulingLinks.claimedAt)),
   });
   if (!link || link.windowEnd < new Date()) throw new Error("This scheduling link has expired or was already used.");
   // Re-check the slot is still free right before booking.

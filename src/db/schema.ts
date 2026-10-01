@@ -405,7 +405,8 @@ export const scorecards = pgTable(
 /** Candidate self-scheduling: a tokenized link that lets the candidate pick a slot. */
 export const schedulingLinks = pgTable("scheduling_links", {
   id: uuid("id").primaryKey().defaultRandom(),
-  token: text("token").notNull().unique(),
+  /** SHA-256 of the link token. The token itself is only ever in the candidate's URL. */
+  tokenHash: text("token_hash").notNull().unique(),
   applicationId: uuid("application_id")
     .notNull()
     .references(() => applications.id, { onDelete: "cascade" }),
@@ -479,6 +480,8 @@ export const emails = pgTable(
     candidateId: uuid("candidate_id")
       .notNull()
       .references(() => candidates.id, { onDelete: "cascade" }),
+    /** Job context for visibility (ARCHITECTURE.md §3.7). Null = candidate-level email, broad roles only. */
+    applicationId: uuid("application_id").references(() => applications.id),
     direction: emailDirection("direction").notNull(),
     fromAddress: text("from_address").notNull(),
     toAddress: text("to_address").notNull(),
@@ -490,7 +493,7 @@ export const emails = pgTable(
     externalMessageId: text("external_message_id"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("emails_candidate_idx").on(t.candidateId)],
+  (t) => [index("emails_candidate_idx").on(t.candidateId), index("emails_application_idx").on(t.applicationId)],
 );
 
 // ---------------------------------------------------------------------------
@@ -625,6 +628,7 @@ export const offerApprovalsRelations = relations(offerApprovals, ({ one }) => ({
 
 export const emailsRelations = relations(emails, ({ one }) => ({
   candidate: one(candidates, { fields: [emails.candidateId], references: [candidates.id] }),
+  application: one(applications, { fields: [emails.applicationId], references: [applications.id] }),
   sentBy: one(users, { fields: [emails.sentById], references: [users.id] }),
 }));
 

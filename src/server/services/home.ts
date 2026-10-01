@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, count, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 
-import type { UserActor } from "@/server/policy";
+import { visibleJobIds, visibleJobsFilter, type UserActor } from "@/server/policy";
 
 export async function getHomeData(actor: UserActor) {
   const userId = actor.id;
@@ -108,13 +108,29 @@ export async function getHomeData(actor: UserActor) {
       .orderBy(asc(s.jobs.title)),
 
     Promise.all([
-      db.select({ n: count() }).from(s.jobs).where(eq(s.jobs.status, "open")),
-      db.select({ n: count() }).from(s.applications).where(eq(s.applications.status, "active")),
+      // Headline counts only include jobs the viewer can see.
+      db.select({ n: count() }).from(s.jobs).where(and(eq(s.jobs.status, "open"), visibleJobsFilter(actor))),
+      db
+        .select({ n: count() })
+        .from(s.applications)
+        .where(and(eq(s.applications.status, "active"), inArray(s.applications.jobId, visibleJobIds(actor)))),
       db
         .select({ n: count() })
         .from(s.interviews)
-        .where(and(gte(s.interviews.startAt, now), lt(s.interviews.startAt, weekAhead), eq(s.interviews.status, "scheduled"))),
-      db.select({ n: count() }).from(s.offers).where(inArray(s.offers.status, ["pending_approval", "approved", "sent"])),
+        .innerJoin(s.applications, eq(s.applications.id, s.interviews.applicationId))
+        .where(
+          and(
+            gte(s.interviews.startAt, now),
+            lt(s.interviews.startAt, weekAhead),
+            eq(s.interviews.status, "scheduled"),
+            inArray(s.applications.jobId, visibleJobIds(actor)),
+          ),
+        ),
+      db
+        .select({ n: count() })
+        .from(s.offers)
+        .innerJoin(s.applications, eq(s.applications.id, s.offers.applicationId))
+        .where(and(inArray(s.offers.status, ["pending_approval", "approved", "sent"]), inArray(s.applications.jobId, visibleJobIds(actor)))),
     ]).then(([a, b, c, d]) => ({ openJobs: a[0].n, activeCandidates: b[0].n, interviewsThisWeek: c[0].n, openOffers: d[0].n })),
   ]);
 

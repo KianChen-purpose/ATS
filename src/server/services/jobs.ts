@@ -5,6 +5,7 @@ import { db, schema as s } from "@/db";
 import { DEFAULT_STAGES } from "@/lib/stages";
 import {
   assertCanSeeJobs,
+  canViewCompensation,
   canViewJobRow,
   NotFoundError,
   requireRecruiting,
@@ -90,7 +91,7 @@ export async function getJobDetail(actor: UserActor, jobId: string) {
     },
   });
   if (!job || !canViewJobRow(actor, job, job.team.map((t) => t.userId))) return null;
-  return job;
+  return canViewCompensation(actor) ? job : { ...job, compMin: null, compMax: null };
 }
 
 export type PipelineApp = Awaited<ReturnType<typeof getPipeline>>[number];

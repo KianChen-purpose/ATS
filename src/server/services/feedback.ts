@@ -19,6 +19,11 @@ export async function getFeedbackPage(actor: UserActor, interviewId: string) {
     },
   });
   if (!iv || !iv.interviewers.some((i) => i.userId === actor.id)) return null;
+  try {
+    await assertCanSeeJobs(actor, [iv.application.jobId]);
+  } catch {
+    return null;
+  }
   const mine = await db.query.scorecards.findFirst({ where: and(eq(s.scorecards.interviewId, iv.id), eq(s.scorecards.authorId, actor.id)) });
   return { interview: iv, mine };
 }

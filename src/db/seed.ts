@@ -254,7 +254,7 @@ async function main() {
 
   console.log("Creating jobs…");
   let openingSeq = 1000;
-  const jobRows: { job: typeof s.jobs.$inferSelect; stages: (typeof s.jobStages.$inferSelect)[]; dept: string }[] = [];
+  const jobRows: { job: typeof s.jobs.$inferSelect; stages: (typeof s.jobStages.$inferSelect)[]; dept: string; team: typeof users }[] = [];
   for (const j of JOBS) {
     const status = j.status ?? "open";
     const openedDaysAgo = faker.number.int({ min: 20, max: 140 });
@@ -293,7 +293,7 @@ async function main() {
     );
     const team = faker.helpers.arrayElements(interviewers.filter((u) => u.id !== job.hiringManagerId), 3);
     await db.insert(s.jobHiringTeam).values(team.map((u) => ({ jobId: job.id, userId: u.id })));
-    jobRows.push({ job, stages, dept: j.dept });
+    jobRows.push({ job, stages, dept: j.dept, team });
   }
 
   console.log("Creating candidates & applications…");
@@ -302,7 +302,7 @@ async function main() {
   const reachWeights = [6, 34, 22, 15, 9, 7, 4, 3];
 
   for (let i = 0; i < 320; i++) {
-    const { job, stages, dept } = pick(activeJobs);
+    const { job, stages, dept, team } = pick(activeJobs);
     const firstName = faker.person.firstName();
     const lastName = faker.person.lastName();
     const skills = faker.helpers.arrayElements(SKILLS_BY_DEPT[dept] ?? ["Communication"], { min: 2, max: 4 });
@@ -452,7 +452,8 @@ async function main() {
       const panel =
         st.type === "screen"
           ? [users.find((u) => u.id === recruiter)!]
-          : faker.helpers.arrayElements([...interviewers.filter((u) => u.id !== job.hiringManagerId), userByName[users.find((u) => u.id === job.hiringManagerId)!.name]], st.name === "Final Interviews" ? 3 : 1);
+          : // Panels come from the job's hiring team (plus the HM), so every interviewer can see the job.
+            faker.helpers.arrayElements([...team, users.find((u) => u.id === job.hiringManagerId)!], st.name === "Final Interviews" ? 3 : 1);
       const upcoming = start.getTime() > now;
       const [iv] = await db
         .insert(s.interviews)
@@ -566,6 +567,7 @@ async function main() {
       const sentAt = daysAgo(Math.max(0, appliedAgo - stepDays));
       await db.insert(s.emails).values({
         candidateId: cand.id,
+        applicationId: app.id,
         direction: "outbound",
         fromAddress: sender.email,
         toAddress: cand.email!,
