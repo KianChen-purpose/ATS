@@ -39,4 +39,4 @@ The palette reference shows this pairing: the "Brand Palette" title is set in Se
 
 Web notes:
 - Browsers can't load `.ttc` collections. For the web app, use Inter as `.woff2` (from the official Inter release or Google Fonts). Keep the `.ttc` for desktop and design use.
-- Load Season Mix from the `.ttf`/`.otf` files, or convert them to `.woff2` for production. Season Mix is a licensed font, so check the licence before serving it from a public career site.
+- Load Season Mix from the `.ttf`/`.otf` files, or convert them to `.woff2` for production. The Season Mix licence allows serving it on the web, public career sites included.
