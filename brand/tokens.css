@@ -1,0 +1,36 @@
+/* PATS brand tokens. See brand/BRAND.md. */
+
+@font-face {
+  font-family: "Season Mix";
+  src: url("./fonts/season-mix/SeasonMix-Regular.otf") format("opentype"),
+       url("./fonts/season-mix/SeasonMix-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Season Mix";
+  src: url("./fonts/season-mix/SeasonMix-Medium.otf") format("opentype"),
+       url("./fonts/season-mix/SeasonMix-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* Palette */
+  --pats-ivory: #F4F3EA;        /* primary: backgrounds */
+  --pats-warm-neutral: #A39E9D; /* secondary: understated surfaces, depth */
+  --pats-black: #000000;        /* execution: text, anchors */
+
+  /* Semantic */
+  --pats-bg: var(--pats-ivory);
+  --pats-surface-muted: var(--pats-warm-neutral);
+  --pats-text: var(--pats-black);
+  --pats-border: var(--pats-warm-neutral);
+
+  /* Typography */
+  --pats-font-primary: "Season Mix", Georgia, serif;  /* headings, subheadings */
+  --pats-font-secondary: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;  /* body, UI */
+}
