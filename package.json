@@ -12,7 +12,7 @@
     "db:check": "drizzle-kit check && drizzle-kit generate --name drift-check && git diff --exit-code --stat -- drizzle && test -z \"$(git ls-files --others --exclude-standard drizzle)\"",
     "db:seed": "tsx src/db/seed.ts",
     "db:reset": "tsx src/db/migrate.ts --reset && npm run db:seed",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
