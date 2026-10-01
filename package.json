@@ -7,9 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:push": "drizzle-kit push --force",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:check": "drizzle-kit check && drizzle-kit generate --name drift-check && git diff --exit-code --stat -- drizzle && test -z \"$(git ls-files --others --exclude-standard drizzle)\"",
     "db:seed": "tsx src/db/seed.ts",
-    "db:reset": "npm run db:push && npm run db:seed",
+    "db:reset": "tsx src/db/migrate.ts --reset && npm run db:seed",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

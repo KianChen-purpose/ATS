@@ -30,9 +30,11 @@ Sign in from the demo login screen as any seeded user. Each role (admin, recruit
 | Command | What it does |
 |---|---|
 | `npm run dev` | Start the app in development mode |
-| `npm run db:push` | Sync the database schema from `src/db/schema.ts` |
+| `npm run db:generate` | Create a SQL migration in `drizzle/` from changes to `src/db/schema.ts` (commit it) |
+| `npm run db:migrate` | Apply pending migrations |
+| `npm run db:check` | Fail if the schema has changes with no committed migration (CI) |
 | `npm run db:seed` | Wipe and reload demo data (deterministic) |
-| `npm run db:reset` | Both of the above |
+| `npm run db:reset` | Local only: drop the database, migrate from scratch, reseed |
 | `npm run typecheck` / `npm run lint` | Checks |
 
 ## Microsoft 365
