@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { asc } from "drizzle-orm";
 import { Lock, Plus } from "lucide-react";
-import { db, schema } from "@/db";
-import { requireUser } from "@/lib/session";
-import { listJobs, jobStatusCounts } from "@/server/queries/jobs";
-import { canManageRecruiting } from "@/server/permissions";
+import { requireActor } from "@/lib/session";
+import { listBrands, listJobs, jobStatusCounts } from "@/server/services/jobs";
+import { canManageRecruiting } from "@/server/policy";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterTabs } from "@/components/ui/filter-tabs";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +23,7 @@ const FUNNEL = [
 ];
 
 export default async function JobsPage(props: PageProps<"/jobs">) {
-  const user = await requireUser();
+  const user = await requireActor();
   const sp = await props.searchParams;
   const status = typeof sp.status === "string" ? sp.status : "open";
   const brand = typeof sp.brand === "string" ? sp.brand : undefined;
@@ -34,7 +32,7 @@ export default async function JobsPage(props: PageProps<"/jobs">) {
   const [jobs, counts, brands] = await Promise.all([
     listJobs(user, { status, brand, q }),
     jobStatusCounts(user),
-    db.query.brands.findMany({ orderBy: asc(schema.brands.name) }),
+    listBrands(),
   ]);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const href = (next: Record<string, string | undefined>) => {

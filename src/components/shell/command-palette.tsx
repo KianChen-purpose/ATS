@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import { Briefcase, User } from "lucide-react";
 import { NAV, SETTINGS_NAV } from "./nav";
-import { searchEverything, type SearchResult } from "@/server/actions/search";
+import { searchEverything } from "@/server/actions/search";
+import type { SearchResult } from "@/server/services/search";
 
 /** Cmd/Ctrl+K palette plus "G then X" navigation shortcuts. */
 export function CommandPalette() {

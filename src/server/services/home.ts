@@ -2,7 +2,10 @@ import "server-only";
 import { and, asc, count, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 
-export async function getHomeData(userId: string) {
+import type { UserActor } from "@/server/policy";
+
+export async function getHomeData(actor: UserActor) {
+  const userId = actor.id;
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * 86_400_000);
 

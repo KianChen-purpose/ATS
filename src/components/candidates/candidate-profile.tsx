@@ -5,9 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
 import { cn, daysSince, fmt, money, RECOMMENDATION_LABELS, timeAgo } from "@/lib/utils";
-import type { CandidateProfile } from "@/server/queries/candidates";
-import type { CurrentUser } from "@/lib/session";
-import { canManageRecruiting } from "@/server/permissions";
+import type { CandidateProfile } from "@/server/services/candidates";
+import type { UserActor } from "@/server/policy";
+import { canManageRecruiting } from "@/server/policy";
 import { ApplicationActions } from "./application-actions";
 import { NoteComposer } from "./note-composer";
 import { TagEditor } from "./tag-editor";
@@ -32,7 +32,7 @@ export function CandidateProfileView({
 }: {
   profile: CandidateProfile;
   options: Options;
-  user: CurrentUser;
+  user: UserActor;
   selectedAppId?: string;
   /** Build a link that selects a different application. */
   appHref: (appId: string) => string;

@@ -2,10 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLink, LayoutGrid, Lock, Plus, Rows3, X } from "lucide-react";
 import { buttonClass } from "@/components/ui/button";
-import { requireUser } from "@/lib/session";
-import { getJobDetail, getPipeline, pipelineCounts } from "@/server/queries/jobs";
-import { getCandidateProfile, getProfileOptions } from "@/server/queries/candidates";
-import { canManageRecruiting } from "@/server/permissions";
+import { requireActor } from "@/lib/session";
+import { getJobDetail, getPipeline, pipelineCounts } from "@/server/services/jobs";
+import { getCandidateProfile, getProfileOptions } from "@/server/services/candidates";
+import { canManageRecruiting } from "@/server/policy";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterTabs } from "@/components/ui/filter-tabs";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,7 @@ import { cn, compRange, fmt } from "@/lib/utils";
 import { markdownToHtml } from "@/lib/markdown";
 
 export async function generateMetadata(props: PageProps<"/jobs/[id]">) {
-  const user = await requireUser();
+  const user = await requireActor();
   const job = await getJobDetail(user, (await props.params).id);
   return { title: job?.title ?? "Job" };
 }
@@ -35,7 +35,7 @@ const STAGE_TYPE_LABEL: Record<string, string> = {
 };
 
 export default async function JobPage(props: PageProps<"/jobs/[id]">) {
-  const user = await requireUser();
+  const user = await requireActor();
   const { id } = await props.params;
   const sp = await props.searchParams;
   const str = (k: string) => (typeof sp[k] === "string" ? (sp[k] as string) : undefined);
@@ -47,7 +47,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
   if (!job) notFound();
   const canManage = canManageRecruiting(user);
 
-  const [apps, counts, options] = await Promise.all([getPipeline(id, status), pipelineCounts(id), getProfileOptions(user)]);
+  const [apps, counts, options] = await Promise.all([getPipeline(user, id, status), pipelineCounts(user, id), getProfileOptions(user)]);
   const panelCandidateId = str("c");
   const panelProfile = panelCandidateId ? await getCandidateProfile(user, panelCandidateId) : null;
 

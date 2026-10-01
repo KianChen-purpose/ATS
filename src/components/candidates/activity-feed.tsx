@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { RECOMMENDATION_LABELS, timeAgo, fmt } from "@/lib/utils";
-import type { CandidateProfile } from "@/server/queries/candidates";
+import type { CandidateProfile } from "@/server/services/candidates";
 
 const ICONS: Record<string, React.ComponentType<{ size?: number }>> = {
   note: StickyNote,

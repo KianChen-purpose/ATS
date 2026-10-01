@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { CalendarDays, Check, Clock, MapPin, Video } from "lucide-react";
-import { requireUser } from "@/lib/session";
-import { canManageRecruiting } from "@/server/permissions";
-import { interviewCounts, listInterviews, type InterviewScope, type InterviewView } from "@/server/queries/interviews";
-import { getProfileOptions } from "@/server/queries/candidates";
+import { requireActor } from "@/lib/session";
+import { canManageRecruiting } from "@/server/policy";
+import { interviewCounts, listInterviews, type InterviewScope, type InterviewView } from "@/server/services/interviews";
+import { getProfileOptions } from "@/server/services/candidates";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterTabs } from "@/components/ui/filter-tabs";
 import { Avatar, candidateColor } from "@/components/ui/avatar";
@@ -19,7 +19,7 @@ export const metadata = { title: "Interviews" };
 const VIEWS: InterviewView[] = ["upcoming", "feedback", "past", "cancelled"];
 
 export default async function InterviewsPage(props: PageProps<"/interviews">) {
-  const user = await requireUser();
+  const user = await requireActor();
   const sp = await props.searchParams;
   const str = (k: string) => (typeof sp[k] === "string" && sp[k] ? (sp[k] as string) : undefined);
 

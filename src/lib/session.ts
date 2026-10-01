@@ -48,3 +48,9 @@ export async function requireUser() {
 }
 
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
+
+/** The signed-in user as a policy actor, for passing to services. Redirects to /login if signed out. */
+export async function requireActor() {
+  const { userActor } = await import("@/server/policy/actor");
+  return userActor(await requireUser());
+}

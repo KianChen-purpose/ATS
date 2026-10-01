@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
 import { ChevronLeft, Video } from "lucide-react";
-import { db, schema as s } from "@/db";
-import { requireUser } from "@/lib/session";
+import { getFeedbackPage } from "@/server/services/feedback";
+import { requireActor } from "@/lib/session";
 import { ScorecardForm } from "@/components/scheduling/scorecard-form";
 import { Card } from "@/components/ui/card";
 import { fmt, RECOMMENDATION_LABELS } from "@/lib/utils";
@@ -16,19 +15,11 @@ const STAGE_KITS: Record<string, string[]> = {
 };
 
 export default async function FeedbackPage(props: PageProps<"/interviews/[id]/feedback">) {
-  const user = await requireUser();
+  const user = await requireActor();
   const { id } = await props.params;
-  const iv = await db.query.interviews.findFirst({
-    where: eq(s.interviews.id, id),
-    with: {
-      stage: true,
-      feedbackForm: true,
-      interviewers: { with: { user: true } },
-      application: { with: { candidate: true, job: { with: { brand: true } } } },
-    },
-  });
-  if (!iv || !iv.interviewers.some((i) => i.userId === user.id)) notFound();
-  const mine = await db.query.scorecards.findFirst({ where: and(eq(s.scorecards.interviewId, iv.id), eq(s.scorecards.authorId, user.id)) });
+  const data = await getFeedbackPage(user, id);
+  if (!data) notFound();
+  const { interview: iv, mine } = data;
   const c = iv.application.candidate;
   const attributes = iv.feedbackForm?.attributes ?? [];
   const kit = STAGE_KITS[iv.stage?.type ?? "interview"] ?? STAGE_KITS.interview;

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, daysSince, fmt, timeAgo } from "@/lib/utils";
 import { archiveApplications, moveToStage } from "@/server/actions/applications";
-import type { PipelineApp } from "@/server/queries/jobs";
+import type { PipelineApp } from "@/server/services/jobs";
 import { FeedbackDots } from "./pipeline-card";
 
 type Stage = { id: string; name: string; type: string; position: number };

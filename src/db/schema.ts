@@ -396,7 +396,10 @@ export const scorecards = pgTable(
     notes: text("notes"),
     submittedAt: timestamp("submitted_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("scorecards_app_idx").on(t.applicationId)],
+  (t) => [
+    index("scorecards_app_idx").on(t.applicationId),
+    uniqueIndex("scorecards_interview_author_uq").on(t.interviewId, t.authorId),
+  ],
 );
 
 /** Candidate self-scheduling: a tokenized link that lets the candidate pick a slot. */
@@ -414,6 +417,8 @@ export const schedulingLinks = pgTable("scheduling_links", {
   windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
   createdById: uuid("created_by_id").references(() => users.id),
   bookedInterviewId: uuid("booked_interview_id").references(() => interviews.id, { onDelete: "set null" }),
+  /** Set atomically when a candidate starts booking, so a link can only be used once. */
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

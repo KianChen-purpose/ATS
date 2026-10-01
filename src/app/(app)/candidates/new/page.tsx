@@ -1,19 +1,17 @@
-import { asc } from "drizzle-orm";
 import { notFound } from "next/navigation";
-import { db, schema } from "@/db";
-import { requireUser } from "@/lib/session";
-import { canManageRecruiting } from "@/server/permissions";
-import { getProfileOptions } from "@/server/queries/candidates";
+import { requireActor } from "@/lib/session";
+import { canManageRecruiting } from "@/server/policy";
+import { getProfileOptions, listSources } from "@/server/services/candidates";
 import { PageHeader } from "@/components/ui/page-header";
 import { NewCandidateForm } from "@/components/candidates/new-candidate-form";
 
 export const metadata = { title: "Add candidate" };
 
 export default async function NewCandidatePage(props: PageProps<"/candidates/new">) {
-  const user = await requireUser();
+  const user = await requireActor();
   if (!canManageRecruiting(user)) notFound();
   const sp = await props.searchParams;
-  const [{ jobs }, sources] = await Promise.all([getProfileOptions(user), db.query.sources.findMany({ orderBy: asc(schema.sources.name) })]);
+  const [{ jobs }, sources] = await Promise.all([getProfileOptions(user), listSources()]);
   return (
     <>
       <PageHeader title="Add candidate" />

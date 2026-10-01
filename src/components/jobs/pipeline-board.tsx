@@ -5,7 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import { moveToStage } from "@/server/actions/applications";
-import type { PipelineApp } from "@/server/queries/jobs";
+import type { PipelineApp } from "@/server/services/jobs";
 import { PipelineCard } from "./pipeline-card";
 
 type Stage = { id: string; name: string; type: string };

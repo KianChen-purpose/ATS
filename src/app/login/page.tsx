@@ -1,6 +1,5 @@
-import { asc } from "drizzle-orm";
 import { connection } from "next/server";
-import { db, schema } from "@/db";
+import { listDemoSignInUsers } from "@/server/services/users";
 import { signInAs } from "@/server/actions/auth";
 import { Avatar } from "@/components/ui/avatar";
 import { PatsLogo } from "@/components/logo";
@@ -13,7 +12,7 @@ const ROLE_ORDER = ["admin", "recruiter", "coordinator", "hiring_manager", "inte
 
 export default async function LoginPage() {
   await connection(); // render per request: user list and SSO status come from the DB/env
-  const users = await db.query.users.findMany({ orderBy: asc(schema.users.name) });
+  const users = await listDemoSignInUsers();
   const grouped = ROLE_ORDER.map((role) => ({ role, users: users.filter((u) => u.role === role) })).filter((g) => g.users.length);
 
   return (

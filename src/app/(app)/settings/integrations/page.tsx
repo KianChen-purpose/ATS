@@ -1,7 +1,8 @@
-import { desc } from "drizzle-orm";
 import { CheckCircle2, CircleDashed, Mail, CalendarDays, MessageSquare, FolderOpen, ShieldCheck, BarChart3 } from "lucide-react";
-import { db, schema } from "@/db";
-import { requireUser } from "@/lib/session";
+import { notFound } from "next/navigation";
+import { canViewSettings } from "@/server/policy";
+import { listIntegrationEvents } from "@/server/services/users";
+import { requireActor } from "@/lib/session";
 import { m365Configured } from "@/server/integrations/m365";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card, CardHeader, EmptyState } from "@/components/ui/card";
@@ -20,9 +21,10 @@ const SERVICES = [
 ];
 
 export default async function IntegrationsPage() {
-  await requireUser();
+  const user = await requireActor();
+  if (!canViewSettings(user)) notFound();
   const live = m365Configured();
-  const events = await db.query.integrationEvents.findMany({ orderBy: desc(schema.integrationEvents.createdAt), limit: 50 });
+  const events = await listIntegrationEvents(user);
 
   return (
     <>

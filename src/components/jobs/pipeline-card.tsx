@@ -1,7 +1,7 @@
 import { CalendarClock } from "lucide-react";
 import { Avatar, candidateColor } from "@/components/ui/avatar";
 import { cn, daysSince, fmt } from "@/lib/utils";
-import type { PipelineApp } from "@/server/queries/jobs";
+import type { PipelineApp } from "@/server/services/jobs";
 
 export function FeedbackDots({ feedback }: { feedback: Record<string, number> }) {
   const order = [

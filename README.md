@@ -48,13 +48,17 @@ Next.js 16 (App Router, server actions) · TypeScript · Tailwind CSS 4 · Postg
 
 ```
 src/
-  app/(app)/         Staff app (requires sign-in)
-  app/login/         Demo sign-in / Entra SSO
-  components/        UI primitives and app shell
-  db/                Schema, client, seed
-  server/actions/    Server actions (mutations)
-  server/queries/    Data loading
+  app/(app)/              Staff app (requires sign-in). No database access.
+  app/login/              Demo sign-in / Entra SSO
+  app/schedule/[token]/   Public candidate self-scheduling
+  components/             UI primitives and app shell. No database access.
+  db/                     Schema, client, migration runner, seed
+  server/actions/         "use server" adapters: zod → service → revalidate
+  server/services/        Business logic: every read/write, permission check and audit row
+  server/policy/          Authorization: actors, job visibility, field-level rules
   server/integrations/m365/   M365 client: mock + Microsoft Graph
+drizzle/                  Committed SQL migrations
+tests/                    vitest suites against a real Postgres
 ```
 
 ## Build phases

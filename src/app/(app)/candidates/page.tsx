@@ -1,10 +1,8 @@
 import Link from "next/link";
-import { asc } from "drizzle-orm";
 import { Plus } from "lucide-react";
-import { db, schema } from "@/db";
-import { requireUser } from "@/lib/session";
-import { listCandidates, getProfileOptions, CANDIDATES_PAGE_SIZE } from "@/server/queries/candidates";
-import { canManageRecruiting } from "@/server/permissions";
+import { requireActor } from "@/lib/session";
+import { listCandidates, listSources, getProfileOptions, CANDIDATES_PAGE_SIZE } from "@/server/services/candidates";
+import { canManageRecruiting } from "@/server/policy";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterTabs } from "@/components/ui/filter-tabs";
 import { Avatar, candidateColor } from "@/components/ui/avatar";
@@ -16,7 +14,7 @@ import { timeAgo } from "@/lib/utils";
 export const metadata = { title: "Candidates" };
 
 export default async function CandidatesPage(props: PageProps<"/candidates">) {
-  const user = await requireUser();
+  const user = await requireActor();
   const sp = await props.searchParams;
   const str = (k: string) => (typeof sp[k] === "string" && sp[k] ? (sp[k] as string) : undefined);
   const filters = { q: str("q"), jobId: str("job"), status: str("status") ?? "active", sourceId: str("source"), page: Number(str("page") ?? 1) };
@@ -24,7 +22,7 @@ export default async function CandidatesPage(props: PageProps<"/candidates">) {
   const [{ rows, total, page }, options, sources] = await Promise.all([
     listCandidates(user, filters),
     getProfileOptions(user),
-    db.query.sources.findMany({ orderBy: asc(schema.sources.name) }),
+    listSources(),
   ]);
   const href = (next: Record<string, string | undefined>) => {
     const p = new URLSearchParams();

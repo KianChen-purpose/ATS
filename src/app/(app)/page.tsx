@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CalendarClock, ClipboardCheck, FileSignature, Video } from "lucide-react";
-import { requireUser } from "@/lib/session";
-import { getHomeData } from "@/server/queries/home";
+import { requireActor } from "@/lib/session";
+import { getHomeData } from "@/server/services/home";
 import { Card, CardHeader, EmptyState } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, candidateColor } from "@/components/ui/avatar";
@@ -10,8 +10,8 @@ import { fmt, money, timeAgo } from "@/lib/utils";
 export const metadata = { title: "Home" };
 
 export default async function HomePage() {
-  const user = await requireUser();
-  const { upcoming, feedbackDue, approvals, myJobs, stats } = await getHomeData(user.id);
+  const user = await requireActor();
+  const { upcoming, feedbackDue, approvals, myJobs, stats } = await getHomeData(user);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 

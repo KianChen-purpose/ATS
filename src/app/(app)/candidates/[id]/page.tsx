@@ -1,19 +1,19 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
-import { requireUser } from "@/lib/session";
-import { getCandidateProfile, getProfileOptions } from "@/server/queries/candidates";
+import { requireActor } from "@/lib/session";
+import { getCandidateProfile, getProfileOptions } from "@/server/services/candidates";
 import { CandidateProfileView } from "@/components/candidates/candidate-profile";
 
 export async function generateMetadata(props: PageProps<"/candidates/[id]">) {
   const { id } = await props.params;
-  const user = await requireUser();
+  const user = await requireActor();
   const p = await getCandidateProfile(user, id);
   return { title: p ? `${p.firstName} ${p.lastName}` : "Candidate" };
 }
 
 export default async function CandidatePage(props: PageProps<"/candidates/[id]">) {
-  const user = await requireUser();
+  const user = await requireActor();
   const { id } = await props.params;
   const sp = await props.searchParams;
   const [profile, options] = await Promise.all([getCandidateProfile(user, id), getProfileOptions(user)]);
