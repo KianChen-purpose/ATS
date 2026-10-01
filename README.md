@@ -51,7 +51,7 @@ src/
 |---|---|---|
 | 0 | Foundation: schema, demo data, app shell, ⌘K, demo auth, M365 integration layer | ✅ |
 | 1 | Core ATS: jobs, pipeline board/table, candidate profiles, notes, stage moves, archive | ✅ |
-| 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards | 🚧 |
+| 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards, interviews hub | ✅ |
 | 3 | Offers, approvals, headcount & openings, Word offer letters | ⏳ |
 | 4 | Career sites (multi-brand, EN/FR), applications, referrals, sourcing & CRM | ⏳ |
 | 5 | Reporting: standard reports, custom builder, Excel/Power BI | ⏳ |
