@@ -36,6 +36,13 @@
       "when": 1790885720391,
       "tag": "0004_restrict_history_privacy_and_locales",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790886439582,
+      "tag": "0005_brand_tokens_no_hardcoded_colours",
+      "breakpoints": true
     }
   ]
 }

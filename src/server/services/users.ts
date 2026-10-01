@@ -8,7 +8,7 @@ import { canViewSettings, ForbiddenError, type UserActor } from "@/server/policy
 export async function listDemoSignInUsers() {
   if (!demoAuthEnabled()) return [];
   return db
-    .select({ id: s.users.id, name: s.users.name, title: s.users.title, role: s.users.role, avatarColor: s.users.avatarColor })
+    .select({ id: s.users.id, name: s.users.name, title: s.users.title, role: s.users.role })
     .from(s.users)
     .where(eq(s.users.active, true))
     .orderBy(asc(s.users.name));

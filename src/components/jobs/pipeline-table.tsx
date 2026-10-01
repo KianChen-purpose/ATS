@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Avatar, candidateColor } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn, daysSince, fmt, timeAgo } from "@/lib/utils";
@@ -131,7 +131,7 @@ export function PipelineTable({
                   )}
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <Avatar name={name} color={candidateColor(a.firstName + a.lastName)} size={24} />
+                      <Avatar name={name} size={24} />
                       <div className="min-w-0">
                         <div className="font-medium text-zinc-900">{name}</div>
                         <div className="truncate text-xs text-zinc-500">{[a.currentTitle, a.currentCompany].filter(Boolean).join(" · ")}</div>

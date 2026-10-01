@@ -51,12 +51,12 @@ async function reset() {
 }
 
 const BRANDS = [
-  { name: "Purpose Investments", slug: "purpose-investments", primaryColor: "#0f4c81", tagline: "Investing in a better future" },
-  { name: "Purpose Advisor Solutions", slug: "purpose-advisor-solutions", primaryColor: "#2563eb", tagline: "Built for independent advisors" },
-  { name: "Steadyhand", slug: "steadyhand", primaryColor: "#0d9488", tagline: "Investing made simple" },
-  { name: "Harness Investment Management", slug: "harness", primaryColor: "#7c3aed", tagline: "Disciplined, data-driven investing" },
-  { name: "Driven", slug: "driven", primaryColor: "#ea580c", tagline: "Wealth for the next generation" },
-  { name: "Foundation Wealth Partners", slug: "foundation-wealth", primaryColor: "#b45309", tagline: "Partners in your wealth" },
+  { name: "Purpose Investments", slug: "purpose-investments", tagline: "Investing in a better future" },
+  { name: "Purpose Advisor Solutions", slug: "purpose-advisor-solutions", tagline: "Built for independent advisors" },
+  { name: "Steadyhand", slug: "steadyhand", tagline: "Investing made simple" },
+  { name: "Harness Investment Management", slug: "harness", tagline: "Disciplined, data-driven investing" },
+  { name: "Driven", slug: "driven", tagline: "Wealth for the next generation" },
+  { name: "Foundation Wealth Partners", slug: "foundation-wealth", tagline: "Partners in your wealth" },
 ];
 
 const DEPARTMENTS = [
@@ -105,7 +105,6 @@ const USERS: { name: string; title: string; role: (typeof s.userRole.enumValues)
   { name: "James Carter", title: "CFO", role: "executive" },
 ];
 
-const AVATAR_COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
 const STAGE_TEMPLATE: { name: string; type: (typeof s.stageType.enumValues)[number] }[] = [
   { name: "Lead", type: "lead" },
@@ -209,10 +208,9 @@ async function main() {
   const users = await db
     .insert(s.users)
     .values(
-      USERS.map((u, i) => ({
+      USERS.map((u) => ({
         ...u,
         email: `${u.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]+/g, ".")}@purpose.demo`,
-        avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length],
       })),
     )
     .returning();

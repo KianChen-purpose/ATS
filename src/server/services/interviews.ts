@@ -116,7 +116,7 @@ export async function listInterviews(actor: UserActor, opts: { scope: InterviewS
   const ids = rows.map((r) => r.id);
   const [panel, cards] = await Promise.all([
     db
-      .select({ interviewId: s.interviewInterviewers.interviewId, userId: s.users.id, name: s.users.name, color: s.users.avatarColor })
+      .select({ interviewId: s.interviewInterviewers.interviewId, userId: s.users.id, name: s.users.name })
       .from(s.interviewInterviewers)
       .innerJoin(s.users, eq(s.users.id, s.interviewInterviewers.userId))
       .where(inArray(s.interviewInterviewers.interviewId, ids)),
@@ -130,7 +130,7 @@ export async function listInterviews(actor: UserActor, opts: { scope: InterviewS
     const submitted = new Set(cards.filter((c) => c.interviewId === r.id).map((c) => c.authorId));
     const interviewers = panel
       .filter((p) => p.interviewId === r.id)
-      .map((p) => ({ id: p.userId, name: p.name, color: p.color, submitted: submitted.has(p.userId) }));
+      .map((p) => ({ id: p.userId, name: p.name, submitted: submitted.has(p.userId) }));
     return {
       ...r,
       // Booked titles end in " – Candidate Name"; the list already shows the name.
@@ -168,7 +168,7 @@ export async function getSchedulerData(actor: UserActor, candidateId: string, ap
     stages[0];
 
   const people = await db
-    .select({ id: s.users.id, name: s.users.name, title: s.users.title, avatarColor: s.users.avatarColor, role: s.users.role })
+    .select({ id: s.users.id, name: s.users.name, title: s.users.title, role: s.users.role })
     .from(s.users)
     .where(eq(s.users.active, true))
     .orderBy(asc(s.users.name));

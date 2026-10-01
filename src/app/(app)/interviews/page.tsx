@@ -6,7 +6,7 @@ import { interviewCounts, listInterviews, type InterviewScope, type InterviewVie
 import { getProfileOptions } from "@/server/services/candidates";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterTabs } from "@/components/ui/filter-tabs";
-import { Avatar, candidateColor } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonClass } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/card";
@@ -126,7 +126,7 @@ export default async function InterviewsPage(props: PageProps<"/interviews">) {
                       </div>
 
                       <Link href={`/candidates/${iv.candidateId}?app=${iv.applicationId}`} className="flex min-w-0 flex-1 items-center gap-2.5">
-                        <Avatar name={`${iv.firstName} ${iv.lastName}`} color={candidateColor(iv.firstName + iv.lastName)} size={28} />
+                        <Avatar name={`${iv.firstName} ${iv.lastName}`} size={28} />
                         <span className="min-w-0">
                           <span className="block truncate font-medium text-zinc-900 hover:text-accent-700">
                             {iv.firstName} {iv.lastName}
@@ -143,7 +143,7 @@ export default async function InterviewsPage(props: PageProps<"/interviews">) {
                         <div className="flex -space-x-1.5">
                           {iv.interviewers.slice(0, 5).map((p) => (
                             <span key={p.id} className="relative" title={`${p.name}${iv.isPast ? (p.submitted ? " — feedback submitted" : " — feedback missing") : ""}`}>
-                              <Avatar name={p.name} color={p.color} size={24} className="ring-2 ring-white" />
+                              <Avatar name={p.name} size={24} className="ring-2 ring-white" />
                               {iv.isPast && iv.status !== "cancelled" && (
                                 <span className={cn("absolute -right-0.5 -bottom-0.5 flex size-3 items-center justify-center rounded-full ring-2 ring-white", p.submitted ? "bg-emerald-500" : "bg-amber-400")}>
                                   {p.submitted && <Check size={8} className="text-white" strokeWidth={3} />}

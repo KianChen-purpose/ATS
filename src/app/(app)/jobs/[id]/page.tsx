@@ -77,7 +77,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
         subtitle={
           <span className="flex flex-wrap items-center gap-x-2">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: job.brand.primaryColor }} />
+              <span className="h-2 w-2 rounded-full" style={{ background: job.brand.primaryColor ?? "var(--pats-black)" }} />
               {job.brand.name}
             </span>
             {job.department && <span>· {job.department.name}</span>}
@@ -238,7 +238,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
                 .filter((x): x is NonNullable<typeof x> => !!x)
                 .map((m) => (
                   <li key={m.user.id + m.role} className="flex items-center gap-3 px-4 py-2">
-                    <Avatar name={m.user.name} color={m.user.avatarColor} size={26} />
+                    <Avatar name={m.user.name} size={26} />
                     <div className="min-w-0 flex-1">
                       <div className="font-medium">{m.user.name}</div>
                       <div className="text-xs text-zinc-500">{m.user.title}</div>

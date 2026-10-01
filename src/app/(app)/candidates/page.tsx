@@ -5,7 +5,7 @@ import { listCandidates, listSources, getProfileOptions, CANDIDATES_PAGE_SIZE } 
 import { canManageRecruiting } from "@/server/policy";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterTabs } from "@/components/ui/filter-tabs";
-import { Avatar, candidateColor } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { buttonClass } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/card";
@@ -97,7 +97,7 @@ export default async function CandidatesPage(props: PageProps<"/candidates">) {
                   <tr key={c.id} className="group hover:bg-zinc-50">
                     <td className="px-4 py-2">
                       <Link href={`/candidates/${c.id}`} className="flex items-center gap-2.5">
-                        <Avatar name={`${c.firstName} ${c.lastName}`} color={candidateColor(c.firstName + c.lastName)} size={28} />
+                        <Avatar name={`${c.firstName} ${c.lastName}`} size={28} />
                         <span className="min-w-0">
                           <span className="block font-medium text-zinc-900 group-hover:text-accent-700">{c.firstName} {c.lastName}</span>
                           <span className="block truncate text-xs text-zinc-500">{[c.currentTitle, c.currentCompany].filter(Boolean).join(" at ")}</span>

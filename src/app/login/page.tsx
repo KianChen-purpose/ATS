@@ -48,7 +48,7 @@ export default async function LoginPage() {
                         <form key={u.id} action={signInAs}>
                           <input type="hidden" name="userId" value={u.id} />
                           <button className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-zinc-50">
-                            <Avatar name={u.name} color={u.avatarColor} size={26} />
+                            <Avatar name={u.name} size={26} />
                             <span className="min-w-0">
                               <span className="block truncate font-medium text-zinc-900">{u.name}</span>
                               <span className="block truncate text-xs text-zinc-500">{u.title}</span>

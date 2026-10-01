@@ -73,10 +73,10 @@ function highlightMentions(text: string) {
   );
 }
 
-export function PersonChip({ name, color }: { name: string; color: string }) {
+export function PersonChip({ name }: { name: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <Avatar name={name} color={color} size={18} />
+      <Avatar name={name} size={18} />
       {name}
     </span>
   );

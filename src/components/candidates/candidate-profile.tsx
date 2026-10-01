@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Link2, Mail, MapPin, Phone, Lock, FileText, Video, EyeOff } from "lucide-react";
-import { Avatar, candidateColor } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
@@ -56,7 +56,7 @@ export function CandidateProfileView({
       {/* Header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-start gap-3">
-          <Avatar name={name} color={candidateColor(c.firstName + c.lastName)} size={44} />
+          <Avatar name={name} size={44} />
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold text-zinc-900">{name}</h1>
             <div className="text-zinc-600">{[c.currentTitle, c.currentCompany].filter(Boolean).join(" at ")}</div>
@@ -162,7 +162,7 @@ export function CandidateProfileView({
                   allScorecards.map((sc) => (
                     <div key={sc.id} className="rounded-lg border border-zinc-200 p-3">
                       <div className="flex items-center justify-between">
-                        <PersonChip name={sc.author.name} color={sc.author.avatarColor} />
+                        <PersonChip name={sc.author.name} />
                         <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${RECOMMENDATION_LABELS[sc.overall].className}`}>
                           {RECOMMENDATION_LABELS[sc.overall].label}
                         </span>
@@ -208,7 +208,7 @@ export function CandidateProfileView({
                         </div>
                         {iv.status === "scheduled" && iv.startAt > now ? (
                           iv.meetingUrl && (
-                            <a href={iv.meetingUrl} target="_blank" className="inline-flex items-center gap-1 rounded-md bg-[#5b5fc7] px-2 py-1 text-xs font-medium text-white">
+                            <a href={iv.meetingUrl} target="_blank" className="inline-flex items-center gap-1 rounded-md bg-teams px-2 py-1 text-xs font-medium text-white">
                               <Video size={12} /> Teams
                             </a>
                           )

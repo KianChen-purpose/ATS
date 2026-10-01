@@ -4,7 +4,7 @@ import { requireActor } from "@/lib/session";
 import { getHomeData } from "@/server/services/home";
 import { Card, CardHeader, EmptyState } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, candidateColor } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { fmt, money, timeAgo } from "@/lib/utils";
 
 export const metadata = { title: "Home" };
@@ -49,7 +49,7 @@ export default async function HomePage() {
                     <div className="truncate text-xs text-zinc-500">{i.title.split(" – ")[0]} · {i.jobTitle}</div>
                   </div>
                   {i.meetingUrl && (
-                    <a href={i.meetingUrl} target="_blank" className="inline-flex items-center gap-1 rounded-md bg-[#5b5fc7] px-2 py-1 text-xs font-medium text-white hover:bg-[#4f52b2]">
+                    <a href={i.meetingUrl} target="_blank" className="inline-flex items-center gap-1 rounded-md bg-teams px-2 py-1 text-xs font-medium text-white hover:bg-teams-hover">
                       <Video size={12} /> Join Teams
                     </a>
                   )}
@@ -70,7 +70,7 @@ export default async function HomePage() {
             <ul className="divide-y divide-zinc-100">
               {feedbackDue.map((f) => (
                 <li key={f.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <Avatar name={`${f.firstName} ${f.lastName}`} color={candidateColor(f.firstName + f.lastName)} size={26} />
+                  <Avatar name={`${f.firstName} ${f.lastName}`} size={26} />
                   <div className="min-w-0 flex-1">
                     <div className="font-medium">{f.firstName} {f.lastName}</div>
                     <div className="truncate text-xs text-zinc-500">{f.title.split(" – ")[0]} · {timeAgo(f.startAt)}</div>

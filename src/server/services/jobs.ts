@@ -42,9 +42,7 @@ export async function listJobs(actor: UserActor, f: JobListFilters) {
       department: s.departments.name,
       location: s.locations.name,
       hmName: sql<string | null>`${hm}.name`,
-      hmColor: sql<string | null>`${hm}.avatar_color`,
       recruiterName: sql<string | null>`${rec}.name`,
-      recruiterColor: sql<string | null>`${rec}.avatar_color`,
       openings: sql<number>`(SELECT count(*)::int FROM openings o WHERE o.job_id = ${s.jobs.id} AND o.status = 'open')`,
       /** Active application counts keyed by stage type. */
       byType: sql<Record<string, number>>`(

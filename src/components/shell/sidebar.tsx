@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { NAV, SETTINGS_NAV, type NavItem } from "./nav";
 import { signOut } from "@/server/actions/auth";
 
-export function Sidebar({ user }: { user: { name: string; role: string; avatarColor: string; title: string | null } }) {
+export function Sidebar({ user }: { user: { name: string; role: string; title: string | null } }) {
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -41,7 +41,7 @@ export function Sidebar({ user }: { user: { name: string; role: string; avatarCo
       <div className="space-y-0.5 border-t border-zinc-100 px-2 py-2">
         <NavLink item={SETTINGS_NAV} active={isActive(SETTINGS_NAV.href)} />
         <div className="flex items-center gap-2 rounded-md px-2 py-1.5">
-          <Avatar name={user.name} color={user.avatarColor} size={26} />
+          <Avatar name={user.name} size={26} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[12px] font-medium text-zinc-900">{user.name}</div>
             <div className="truncate text-[11px] text-zinc-500">{ROLE_LABELS[user.role]}</div>

@@ -111,7 +111,7 @@ export default async function JobsPage(props: PageProps<"/jobs">) {
                   <tr key={j.id} className="group hover:bg-zinc-50">
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
-                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: j.brandColor }} title={j.brand} />
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: j.brandColor ?? "var(--pats-black)" }} title={j.brand} />
                         <Link href={`/jobs/${j.id}`} className="font-medium text-zinc-900 group-hover:text-accent-700">
                           {j.title}
                         </Link>
@@ -128,8 +128,8 @@ export default async function JobsPage(props: PageProps<"/jobs">) {
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex -space-x-1">
-                        {j.hmName && <Avatar name={j.hmName} color={j.hmColor!} size={22} className="ring-2 ring-white" />}
-                        {j.recruiterName && <Avatar name={j.recruiterName} color={j.recruiterColor!} size={22} className="ring-2 ring-white" />}
+                        {j.hmName && <Avatar name={j.hmName} size={22} className="ring-2 ring-white" />}
+                        {j.recruiterName && <Avatar name={j.recruiterName} size={22} className="ring-2 ring-white" />}
                       </div>
                     </td>
                     {FUNNEL.map((f) => (

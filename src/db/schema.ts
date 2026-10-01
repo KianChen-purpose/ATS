@@ -119,7 +119,8 @@ export const brands = pgTable("brands", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  primaryColor: text("primary_color").notNull().default("#4f46e5"),
+  /** Optional per-brand accent for career sites, extending brand/tokens.css. Null = Purpose Black. */
+  primaryColor: text("primary_color"),
   websiteUrl: text("website_url"),
   tagline: text("tagline"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -149,7 +150,6 @@ export const users = pgTable("users", {
   entraObjectId: text("entra_object_id").unique(),
   managerId: uuid("manager_id").references((): AnyPgColumn => users.id),
   timezone: text("timezone").notNull().default("America/Toronto"),
-  avatarColor: text("avatar_color").notNull().default("#6366f1"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

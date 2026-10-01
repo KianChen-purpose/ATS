@@ -66,6 +66,9 @@ export async function createSchedulingLink(actor: Actor, d: z.output<typeof link
 // data about this one interview request is ever returned.
 // ---------------------------------------------------------------------------
 
+/** Career-facing pages use Purpose Black unless a brand has its own accent. */
+const BRAND_FALLBACK = "var(--pats-black)";
+
 export type PublicSchedulingPage =
   | { state: "invalid" }
   | { state: "booked"; brand: { name: string; primaryColor: string } }
@@ -88,7 +91,7 @@ export async function getPublicSchedulingPage(token: string): Promise<PublicSche
   });
   if (!link) return { state: "invalid" };
   const { job, candidate } = link.application;
-  const brand = { name: job.brand.name, primaryColor: job.brand.primaryColor };
+  const brand = { name: job.brand.name, primaryColor: job.brand.primaryColor ?? BRAND_FALLBACK };
   if (link.bookedInterviewId || link.claimedAt) return { state: "booked", brand };
   if (link.windowEnd < new Date()) return { state: "expired", brand };
   return {

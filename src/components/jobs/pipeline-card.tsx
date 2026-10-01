@@ -1,5 +1,5 @@
 import { CalendarClock } from "lucide-react";
-import { Avatar, candidateColor } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { cn, daysSince, fmt } from "@/lib/utils";
 import type { PipelineApp } from "@/server/services/jobs";
 
@@ -30,7 +30,7 @@ export function PipelineCard({ app, selected }: { app: PipelineApp; selected?: b
       )}
     >
       <div className="flex items-center gap-2">
-        <Avatar name={name} color={candidateColor(app.firstName + app.lastName)} size={22} />
+        <Avatar name={name} size={22} />
         <span className="min-w-0 flex-1 truncate font-medium text-zinc-900">{name}</span>
         <FeedbackDots feedback={app.feedback} />
       </div>
