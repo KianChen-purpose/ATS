@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createSession, destroySession } from "@/lib/session";
 import { demoAuthEnabled } from "@/server/config";
 import { findActiveUser } from "@/server/services/users";
+import { safeNext } from "@/server/services/entra-auth";
 
 /** Demo sign-in: pick any seeded user. Replaced by Entra ID SSO when M365 is configured. */
 export async function signInAs(formData: FormData) {
@@ -14,7 +15,7 @@ export async function signInAs(formData: FormData) {
   const user = userId.success ? await findActiveUser(userId.data) : null;
   if (!user) redirect("/login");
   await createSession(user.id);
-  redirect("/");
+  redirect(safeNext(formData.get("next")));
 }
 
 export async function signOut() {

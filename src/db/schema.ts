@@ -166,6 +166,21 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Delegated Microsoft Graph consent for a user (ARCHITECTURE.md §8.1): PATS sends mail and creates
+ * events as the user, from their own mailbox. The refresh token is encrypted at rest (AES-256-GCM,
+ * TOKEN_ENCRYPTION_KEY from Key Vault) and never logged.
+ */
+export const userOauthTokens = pgTable("user_oauth_tokens", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  provider: text("provider").notNull().default("entra"),
+  refreshTokenEnc: text("refresh_token_enc").notNull(),
+  scopes: text("scopes").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 // ---------------------------------------------------------------------------
 // Jobs
 // ---------------------------------------------------------------------------

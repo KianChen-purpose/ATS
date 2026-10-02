@@ -14,6 +14,7 @@ All M365 calls go through `src/server/integrations/m365`. `m365()` returns the *
      - `User.Read`, `User.ReadBasic.All`: profile and people lookup
    - **Application** permissions only for the shared mailbox (`careers@`) and background sync run by the worker:
      - `Mail.Send` / `Mail.Read`: sending from and syncing replies into `careers@`
+     - `Calendars.Read`: free/busy lookups made through `careers@`
      - `TeamsActivity.Send`: Teams notifications (requires the PATS Teams app, Phase 6)
 4. Scope every application permission with an Exchange **Application Access Policy** or **RBAC for Applications**, limited to `careers@` and the sync mailboxes. Never grant tenant-wide mailbox access.
 5. Set these variables in `.env`:
@@ -26,6 +27,18 @@ M365_SENDER_MAILBOX=careers@purpose.ca
 ```
 
 Restart the app. Settings → Integrations will show **Live · Microsoft Graph**.
+
+## Microsoft sign-in (Entra ID SSO, Phase 6)
+
+Setting the three `M365_*` credentials also turns on **Sign in with Microsoft** (OpenID Connect authorization code flow with PKCE, state and nonce; ID tokens verified against the tenant's signing keys).
+
+1. On the app registration, add the web redirect URI `<APP_URL>/auth/callback` (and `<APP_URL>/login` as the front-channel logout URL).
+2. Add **delegated** Graph permissions `openid`, `profile`, `email`, `offline_access`, `User.Read`, `Mail.Send`, `Calendars.ReadWrite`, and grant admin consent. PATS then sends candidate email and creates interview events **as the signed-in user**, from their own mailbox. Each user's refresh token is stored encrypted (AES-256-GCM, `TOKEN_ENCRYPTION_KEY` from Key Vault) and is dropped automatically if consent is revoked.
+3. Define **app roles** `PATS.Admin`, `PATS.Recruiter`, `PATS.Coordinator`, `PATS.Executive`, `PATS.HiringManager`, `PATS.Interviewer` and assign Entra groups to them. The role in the token updates the user's PATS role at each sign-in (highest role wins).
+4. Enforce MFA and device rules with **Conditional Access** on the PATS enterprise app; PATS doesn't implement its own MFA.
+5. Accounts come from SCIM provisioning (below). People without a PATS account are refused unless `ENTRA_ALLOW_JIT=true`. Deactivated users can't sign in and their sessions stop working on the next request.
+
+Demo sign-in stays available only with `PATS_DEMO_AUTH=true` outside production.
 
 ## Reliability rules
 
