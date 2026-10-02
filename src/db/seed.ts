@@ -17,6 +17,9 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "talent_pool_members",
+    "talent_pools",
+    "referrals",
     "application_answers",
     "application_questions",
     "offer_letter_templates",
@@ -735,6 +738,42 @@ async function main() {
       WHERE a.status = 'hired'
       ORDER BY a.id, o2.code
     )`);
+
+  console.log("Creating talent pools…");
+  {
+    const recruiter = userByName["Maya Thompson"];
+    const [eng, cx] = await db
+      .insert(s.talentPools)
+      .values([
+        { name: "Senior engineers – Toronto", description: "Platform and full-stack, for 2027 hiring", ownerId: recruiter.id },
+        { name: "Bilingual client experience", description: "EN/FR client-facing talent", ownerId: userByName["Sophie Tremblay"].id },
+      ])
+      .returning();
+    const prospects = [
+      { firstName: "Imani", lastName: "Okoro", currentTitle: "Staff Engineer", currentCompany: "Wealthsimple", pool: eng.id, stage: "interested" as const },
+      { firstName: "Mateo", lastName: "Silva", currentTitle: "Senior Backend Engineer", currentCompany: "Shopify", pool: eng.id, stage: "contacted" as const },
+      { firstName: "Priya", lastName: "Natarajan", currentTitle: "Engineering Lead", currentCompany: "KOHO", pool: eng.id, stage: "new" as const },
+      { firstName: "Liam", lastName: "Chen", currentTitle: "Platform Engineer", currentCompany: "Questrade", pool: eng.id, stage: "not_interested" as const },
+      { firstName: "Camille", lastName: "Bouchard", currentTitle: "Conseillère principale", currentCompany: "Desjardins", pool: cx.id, stage: "interested" as const },
+      { firstName: "Olivier", lastName: "Roy", currentTitle: "Client Success Manager", currentCompany: "National Bank", pool: cx.id, stage: "new" as const },
+    ];
+    for (const p of prospects) {
+      const [c] = await db
+        .insert(s.candidates)
+        .values({
+          firstName: p.firstName,
+          lastName: p.lastName,
+          email: `${p.firstName}.${p.lastName}@example.org`.toLowerCase(),
+          currentTitle: p.currentTitle,
+          currentCompany: p.currentCompany,
+          ownerId: recruiter.id,
+          preferredLocale: p.pool === cx.id ? "fr-CA" : "en",
+        })
+        .returning();
+      await db.insert(s.talentPoolMembers).values({ poolId: p.pool, candidateId: c.id, stage: p.stage, addedById: recruiter.id });
+      await db.insert(s.activities).values({ candidateId: c.id, type: "note", actorId: recruiter.id, body: "Sourced as a prospect", createdAt: daysAgo(10) });
+    }
+  }
 
   const counts = await db.execute(sql`SELECT
     (SELECT count(*) FROM candidates) AS candidates,

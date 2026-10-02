@@ -6,6 +6,7 @@ import { m365 } from "@/server/integrations/m365";
 import { NotFoundError, requireUserActor, type Actor, type UserActor } from "@/server/policy";
 import { recordAudit } from "./audit";
 import { storeFile } from "./files";
+import { markPoolMembersApplied } from "./talent-pools";
 
 /**
  * Employee referrals (PRD §4.8). Any signed-in employee can refer someone to a public open role.
@@ -65,6 +66,7 @@ export async function submitReferral(actor: Actor, d: z.output<typeof referralSc
         .returning();
       await tx.insert(s.applicationStageEvents).values({ applicationId: app.id, toStageId: review.id, status: "active", movedById: user.id });
       await recordAudit(tx, actor, "application.created", "application", app.id, { candidateId, jobId: job.id, via: "referral" });
+      await markPoolMembersApplied(tx, candidateId);
     }
     const [ref] = await tx
       .insert(s.referrals)

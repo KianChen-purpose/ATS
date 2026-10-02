@@ -7,6 +7,7 @@ import { systemActor } from "@/server/policy";
 import { recordAudit } from "./audit";
 import { sendAndLogEmail } from "./email";
 import { storeFile } from "./files";
+import { markPoolMembersApplied } from "./talent-pools";
 
 /**
  * Public applications from the career site (PRD §4.7). No staff session: the system actor
@@ -133,6 +134,7 @@ export async function submitApplication(d: z.output<typeof applySchema>, resume:
     await tx.insert(s.applicationStageEvents).values({ applicationId: app.id, toStageId: review.id, status: "active" });
     await tx.insert(s.activities).values({ candidateId, applicationId: app.id, type: "application_created", body: "Applied on the career site", metadata: { locale: d.locale } });
     await recordAudit(tx, actor, "application.created", "application", app.id, { candidateId, jobId: job.id, via: "career_site" });
+    await markPoolMembersApplied(tx, candidateId);
 
     if (questions.length) {
       await tx.insert(s.applicationAnswers).values(

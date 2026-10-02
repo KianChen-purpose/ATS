@@ -108,6 +108,7 @@ export const offerStatus = pgEnum("offer_status", [
   "declined",
   "withdrawn",
 ]);
+export const prospectStage = pgEnum("prospect_stage", ["new", "contacted", "interested", "not_interested", "applied"]);
 export const questionKind = pgEnum("question_kind", ["short_text", "long_text", "yes_no", "single_select"]);
 export const fileKind = pgEnum("file_kind", ["offer_letter", "offer_letter_template", "resume"]);
 export const approvalSubject = pgEnum("approval_subject", ["job", "offer"]);
@@ -690,6 +691,38 @@ export const applicationAnswers = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Sourcing & CRM (PRD §4.2): talent pools of prospects not tied to a job
+// ---------------------------------------------------------------------------
+
+export const talentPools = pgTable("talent_pools", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** Null = shared across brands. */
+  brandId: uuid("brand_id").references(() => brands.id),
+  ownerId: uuid("owner_id").references(() => users.id),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const talentPoolMembers = pgTable(
+  "talent_pool_members",
+  {
+    poolId: uuid("pool_id")
+      .notNull()
+      .references(() => talentPools.id, { onDelete: "restrict" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "restrict" }),
+    stage: prospectStage("stage").notNull().default("new"),
+    addedById: uuid("added_by_id").references(() => users.id),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.poolId, t.candidateId] }), index("talent_pool_members_candidate_idx").on(t.candidateId)],
+);
+
+// ---------------------------------------------------------------------------
 // Referrals (PRD §4.8)
 // ---------------------------------------------------------------------------
 
@@ -987,4 +1020,16 @@ export const referralsRelations = relations(referrals, ({ one }) => ({
   referrer: one(users, { fields: [referrals.referrerId], references: [users.id] }),
   application: one(applications, { fields: [referrals.applicationId], references: [applications.id] }),
   job: one(jobs, { fields: [referrals.jobId], references: [jobs.id] }),
+}));
+
+export const talentPoolsRelations = relations(talentPools, ({ one, many }) => ({
+  brand: one(brands, { fields: [talentPools.brandId], references: [brands.id] }),
+  owner: one(users, { fields: [talentPools.ownerId], references: [users.id] }),
+  members: many(talentPoolMembers),
+}));
+
+export const talentPoolMembersRelations = relations(talentPoolMembers, ({ one }) => ({
+  pool: one(talentPools, { fields: [talentPoolMembers.poolId], references: [talentPools.id] }),
+  candidate: one(candidates, { fields: [talentPoolMembers.candidateId], references: [candidates.id] }),
+  addedBy: one(users, { fields: [talentPoolMembers.addedById], references: [users.id] }),
 }));

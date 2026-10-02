@@ -9,6 +9,7 @@ import type { Tx } from "./tx";
 import { recordAudit } from "./audit";
 import { assertCanSeeCandidate } from "./candidates";
 import { sendAndLogEmail } from "./email";
+import { markPoolMembersApplied } from "./talent-pools";
 
 /**
  * Loads applications by id and checks the actor can see every one of their jobs.
@@ -240,5 +241,6 @@ export async function addCandidateToJob(actor: Actor, d: z.output<typeof addToJo
     await tx.insert(s.applicationStageEvents).values({ applicationId: app.id, toStageId: first.id, status: "active", movedById: user.id });
     await tx.insert(s.activities).values({ candidateId: d.candidateId, applicationId: app.id, type: "application_created", actorId: user.id, body: `Added to ${job?.title}` });
     await recordAudit(tx, actor, "application.created", "application", app.id, { candidateId: d.candidateId, jobId: d.jobId });
+    await markPoolMembersApplied(tx, d.candidateId);
   });
 }

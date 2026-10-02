@@ -27,6 +27,8 @@ With `PATS_DEMO_AUTH=true` (the `.env.example` default), sign in from the demo l
 
 Demo sign-in only works outside production: the server refuses to start if `PATS_DEMO_AUTH=true` with `NODE_ENV=production`, or if `SESSION_SECRET` is missing, shorter than 32 characters or still the example value.
 
+Public career sites run at `/careers` (all brands) and `/careers/<brand>` (e.g. `/careers/steadyhand`, `?lang=fr` for French). Brand websites can embed roles from `GET /api/public/jobs?brand=<slug>&lang=en|fr`.
+
 ## Scripts
 
 | Command | What it does |
@@ -74,7 +76,7 @@ Per [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §10, foundation hardening come
 | 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards, interviews hub | ✅ |
 | **H** | **Foundation hardening:** service and policy layers, authorization fixes, audit (incl. view logging), immutable history, versioned migrations, demo-auth guard, consent/retention schema, tests and CI | ✅ |
 | 3 | Offers, approval chains (jobs + offers), approvals inbox, openings, Word offer letters (EN/FR-CA) | ✅ |
-| 4 | Career sites (multi-brand, EN/FR), applications, referrals, sourcing & CRM | ⏳ |
+| 4 | Career sites (multi-brand, EN/FR) + public jobs API, applications with questions/consent/resumes, referrals, talent pools & prospects | ✅ (agency portal, email sequences, browser extension later) |
 | 5 | Reporting: standard reports, custom builder, Excel/Power BI | ⏳ |
 | 6 | Live M365: Entra SSO/SCIM, Graph mail sync, Teams app & approvals (SSO can go live earlier, once tenant consent is ready) | ⏳ |
 | 7 | AI assist: application review, notes, summaries, drafting | ⏳ |
