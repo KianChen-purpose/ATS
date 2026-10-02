@@ -14,7 +14,7 @@ import {
   uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -108,12 +108,20 @@ export const offerStatus = pgEnum("offer_status", [
   "declined",
   "withdrawn",
 ]);
+export const prospectStage = pgEnum("prospect_stage", ["new", "contacted", "interested", "not_interested", "applied"]);
+export const questionKind = pgEnum("question_kind", ["short_text", "long_text", "yes_no", "single_select"]);
+export const fileKind = pgEnum("file_kind", ["offer_letter", "offer_letter_template", "resume"]);
 export const approvalSubject = pgEnum("approval_subject", ["job", "offer"]);
 export const approvalRequestStatus = pgEnum("approval_request_status", ["pending", "approved", "rejected", "cancelled"]);
 export const approvalStepStatus = pgEnum("approval_step_status", ["pending", "approved", "rejected", "skipped"]);
 /** Who approves a chain step: a named person, or a role resolved from the job when the request starts. */
 export const approverType = pgEnum("approver_type", ["user", "hiring_manager", "recruiter"]);
 export const emailDirection = pgEnum("email_direction", ["outbound", "inbound"]);
+/** Who can open a saved report or dashboard. Viewers always see numbers trimmed to their own access. */
+export const reportVisibility = pgEnum("report_visibility", ["private", "people", "everyone"]);
+export const reportFrequency = pgEnum("report_frequency", ["daily", "weekly", "monthly"]);
+export const reportFormat = pgEnum("report_format", ["xlsx", "csv"]);
+export const jobStatusQueue = pgEnum("queue_job_status", ["queued", "running", "done", "dead"]);
 
 // ---------------------------------------------------------------------------
 // Organization
@@ -153,10 +161,67 @@ export const users = pgTable("users", {
   role: userRole("role").notNull().default("interviewer"),
   /** Entra ID object id once SSO/SCIM is connected. */
   entraObjectId: text("entra_object_id").unique(),
+  /** SCIM externalId sent by the provisioning service (map it to objectId in Entra). */
+  scimExternalId: text("scim_external_id").unique(),
   managerId: uuid("manager_id").references((): AnyPgColumn => users.id),
   timezone: text("timezone").notNull().default("America/Toronto"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
+// Provisioning (SCIM 2.0, ARCHITECTURE.md §6.1)
+// ---------------------------------------------------------------------------
+
+/** Bearer tokens for the Entra provisioning service. Only a SHA-256 is stored. */
+export const scimTokens = pgTable("scim_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  prefix: text("prefix").notNull(),
+  createdById: uuid("created_by_id").references((): AnyPgColumn => users.id),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Entra groups pushed by SCIM. A group can grant a PATS role. */
+export const scimGroups = pgTable("scim_groups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  displayName: text("display_name").notNull(),
+  externalId: text("external_id").unique(),
+  /** PATS role members get; null = the group doesn't affect roles. */
+  role: userRole("role"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const scimGroupMembers = pgTable(
+  "scim_group_members",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => scimGroups.id, { onDelete: "restrict" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references((): AnyPgColumn => users.id),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.userId] }), index("scim_group_members_user_idx").on(t.userId)],
+);
+
+/**
+ * Delegated Microsoft Graph consent for a user (ARCHITECTURE.md §8.1): PATS sends mail and creates
+ * events as the user, from their own mailbox. The refresh token is encrypted at rest (AES-256-GCM,
+ * TOKEN_ENCRYPTION_KEY from Key Vault) and never logged.
+ */
+export const userOauthTokens = pgTable("user_oauth_tokens", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  provider: text("provider").notNull().default("entra"),
+  refreshTokenEnc: text("refresh_token_enc").notNull(),
+  scopes: text("scopes").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -260,7 +325,9 @@ export const candidates = pgTable(
     ownerId: uuid("owner_id").references(() => users.id),
     /** Language for candidate-facing email and pages (ARCHITECTURE.md §7.2). */
     preferredLocale: locale("preferred_locale").notNull().default("en"),
-    /** IANA time zone for candidate-facing times; null = brand default (America/Toronto). */
+    /** The candidate's current resume file (FileStore). */
+  resumeFileId: uuid("resume_file_id").references((): AnyPgColumn => files.id),
+  /** IANA time zone for candidate-facing times; null = brand default (America/Toronto). */
     timezone: text("timezone"),
     /** Set when personal data was wiped (deletion request or retention). Row and history stay. */
     anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
@@ -468,6 +535,8 @@ export const offers = pgTable("offers", {
   sentAt: timestamp("sent_at", { withTimezone: true }),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   declineReason: text("decline_reason"),
+  /** The letter most recently generated for this offer. */
+  letterFileId: uuid("letter_file_id").references((): AnyPgColumn => files.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -503,13 +572,21 @@ export const emails = pgTable(
     toAddress: text("to_address").notNull(),
     subject: text("subject").notNull(),
     body: text("body").notNull(),
+    /** Files sent with the email (metadata only; bytes are in the FileStore). */
+    attachments: jsonb("attachments").$type<{ fileId: string; name: string }[]>().notNull().default([]),
     sentById: uuid("sent_by_id").references(() => users.id),
     /** Graph conversationId / internetMessageId for thread sync. */
     externalThreadId: text("external_thread_id"),
     externalMessageId: text("external_message_id"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("emails_candidate_idx").on(t.candidateId), index("emails_application_idx").on(t.applicationId)],
+  (t) => [
+    index("emails_candidate_idx").on(t.candidateId),
+    index("emails_application_idx").on(t.applicationId),
+    index("emails_thread_idx").on(t.externalThreadId),
+    // A synced reply is stored once, however many mailboxes it reached.
+    uniqueIndex("emails_inbound_message_uq").on(t.externalMessageId).where(sql`direction = 'inbound'`),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -634,6 +711,370 @@ export const approvalSteps = pgTable(
   },
   (t) => [uniqueIndex("approval_steps_pos_uq").on(t.requestId, t.position), index("approval_steps_approver_idx").on(t.approverId, t.status)],
 );
+
+// ---------------------------------------------------------------------------
+// Application forms (PRD §4.7): configurable questions per job, in EN and FR-CA
+// ---------------------------------------------------------------------------
+
+export const applicationQuestions = pgTable(
+  "application_questions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    kind: questionKind("kind").notNull(),
+    labelEn: text("label_en").notNull(),
+    labelFr: text("label_fr").notNull(),
+    /** single_select choices: stable value plus EN/FR labels. */
+    options: jsonb("options").$type<{ value: string; en: string; fr: string }[]>().notNull().default([]),
+    required: boolean("required").notNull().default(false),
+    /**
+     * Knockout: answers that pass ("yes"/"no" or option values). Any other answer archives the
+     * application with the "Knockout question" reason. Null = not a knockout question.
+     */
+    passAnswers: text("pass_answers").array(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("application_questions_job_idx").on(t.jobId, t.position)],
+);
+
+export const applicationAnswers = pgTable(
+  "application_answers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "restrict" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => applicationQuestions.id, { onDelete: "restrict" }),
+    value: text("value"),
+    knockedOut: boolean("knocked_out").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("application_answers_uq").on(t.applicationId, t.questionId)],
+);
+
+// ---------------------------------------------------------------------------
+// Sourcing & CRM (PRD §4.2): talent pools of prospects not tied to a job
+// ---------------------------------------------------------------------------
+
+export const talentPools = pgTable("talent_pools", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** Null = shared across brands. */
+  brandId: uuid("brand_id").references(() => brands.id),
+  ownerId: uuid("owner_id").references(() => users.id),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const talentPoolMembers = pgTable(
+  "talent_pool_members",
+  {
+    poolId: uuid("pool_id")
+      .notNull()
+      .references(() => talentPools.id, { onDelete: "restrict" }),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "restrict" }),
+    stage: prospectStage("stage").notNull().default("new"),
+    addedById: uuid("added_by_id").references(() => users.id),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.poolId, t.candidateId] }), index("talent_pool_members_candidate_idx").on(t.candidateId)],
+);
+
+// ---------------------------------------------------------------------------
+// Referrals (PRD §4.8)
+// ---------------------------------------------------------------------------
+
+/** An employee's referral. Several people can refer the same application. */
+export const referrals = pgTable(
+  "referrals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    referrerId: uuid("referrer_id")
+      .notNull()
+      .references(() => users.id),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "restrict" }),
+    /** Job context for visibility (ARCHITECTURE.md §3.7). */
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+    relationship: text("relationship"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("referrals_referrer_idx").on(t.referrerId, t.createdAt), uniqueIndex("referrals_referrer_app_uq").on(t.referrerId, t.applicationId)],
+);
+
+// ---------------------------------------------------------------------------
+// Reporting (PRD §7.2): saved custom reports and dashboards
+// ---------------------------------------------------------------------------
+
+/**
+ * A saved custom report. `definition` is a validated builder definition (services/reports/builder.ts):
+ * whitelisted dataset, dimensions and metrics, never SQL. Each viewer runs it under their own access.
+ */
+export const savedReports = pgTable(
+  "saved_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id),
+    definition: jsonb("definition").$type<Record<string, unknown>>().notNull(),
+    /** Default filter row (range preset, brand, department, job) the report opens with. */
+    filters: jsonb("filters").$type<Record<string, string>>().notNull().default({}),
+    visibility: reportVisibility("visibility").notNull().default("private"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("saved_reports_owner_idx").on(t.ownerId)],
+);
+
+/** People a `people`-visibility report or dashboard is shared with. */
+export const savedReportShares = pgTable(
+  "saved_report_shares",
+  {
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => savedReports.id, { onDelete: "restrict" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+  },
+  (t) => [primaryKey({ columns: [t.reportId, t.userId] }), index("saved_report_shares_user_idx").on(t.userId)],
+);
+
+export const reportDashboards = pgTable("report_dashboards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  ownerId: uuid("owner_id")
+    .notNull()
+    .references(() => users.id),
+  visibility: reportVisibility("visibility").notNull().default("private"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const reportDashboardShares = pgTable(
+  "report_dashboard_shares",
+  {
+    dashboardId: uuid("dashboard_id")
+      .notNull()
+      .references(() => reportDashboards.id, { onDelete: "restrict" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+  },
+  (t) => [primaryKey({ columns: [t.dashboardId, t.userId] })],
+);
+
+/** Ordered tiles on a dashboard; each one is a saved report. */
+export const reportDashboardItems = pgTable(
+  "report_dashboard_items",
+  {
+    dashboardId: uuid("dashboard_id")
+      .notNull()
+      .references(() => reportDashboards.id, { onDelete: "restrict" }),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => savedReports.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.dashboardId, t.reportId] })],
+);
+
+/**
+ * Personal access tokens for the Power BI / Excel OData feed (PRD §7.3). The feed runs as the token's
+ * user, under their current role and job access. Only a SHA-256 of the token is stored.
+ */
+export const reportFeedTokens = pgTable(
+  "report_feed_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    /** First characters of the token, to tell tokens apart in the UI. */
+    prefix: text("prefix").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("report_feed_tokens_user_idx").on(t.userId)],
+);
+
+/**
+ * Scheduled delivery of a saved report by email (PRD §7.3). The worker sends each recipient their
+ * own copy, run under that recipient's access, never the owner's.
+ */
+export const reportSchedules = pgTable(
+  "report_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => savedReports.id, { onDelete: "restrict" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id),
+    frequency: reportFrequency("frequency").notNull().default("weekly"),
+    /** 0 = Monday … 6 = Sunday, for weekly schedules. */
+    dayOfWeek: integer("day_of_week"),
+    /** 1–28, for monthly schedules. */
+    dayOfMonth: integer("day_of_month"),
+    /** Local hour (0–23) in `timezone`. */
+    hour: integer("hour").notNull().default(8),
+    timezone: text("timezone").notNull().default("America/Toronto"),
+    format: reportFormat("format").notNull().default("xlsx"),
+    recipientIds: uuid("recipient_ids").array().notNull(),
+    active: boolean("active").notNull().default(true),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    /** Summary of the last run: delivered / skipped counts, never recipient addresses. */
+    lastResult: jsonb("last_result").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("report_schedules_due_idx").on(t.active, t.nextRunAt), index("report_schedules_report_idx").on(t.reportId)],
+);
+
+// ---------------------------------------------------------------------------
+// Background work (ARCHITECTURE.md D5) and Microsoft Graph sync
+// ---------------------------------------------------------------------------
+
+/**
+ * Postgres-backed queue behind the queue port (Azure Service Bus can replace it). Payloads carry ids
+ * only, never email bodies or other personal data (§4.6).
+ */
+export const jobQueue = pgTable(
+  "job_queue",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    status: jobStatusQueue("status").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    /** Redacted, truncated error from the last failed attempt. */
+    lastError: text("last_error"),
+    /** Enqueuing the same key twice is a no-op (periodic jobs, retried webhooks). */
+    dedupeKey: text("dedupe_key").unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("job_queue_ready_idx").on(t.status, t.runAt)],
+);
+
+/** Graph change-notification subscriptions on mailboxes PATS syncs. */
+export const graphSubscriptions = pgTable("graph_subscriptions", {
+  /** The subscription id Graph returned. */
+  id: text("id").primaryKey(),
+  mailbox: text("mailbox").notNull().unique(),
+  /** Null for the shared mailbox; the user whose delegated consent the subscription uses otherwise. */
+  userId: uuid("user_id").references((): AnyPgColumn => users.id),
+  /** SHA-256 of the clientState secret Graph echoes on every notification. */
+  clientStateHash: text("client_state_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Delta-query position per mailbox, the fallback for missed notifications. */
+export const mailSyncState = pgTable("mail_sync_state", {
+  mailbox: text("mailbox").primaryKey(),
+  deltaLink: text("delta_link"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+});
+
+// ---------------------------------------------------------------------------
+// Microsoft Teams app (bot + Adaptive Cards)
+// ---------------------------------------------------------------------------
+
+/** The personal chat between the PATS bot and a user, captured when they install the app. */
+export const teamsConversations = pgTable("teams_conversations", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references((): AnyPgColumn => users.id),
+  aadObjectId: text("aad_object_id").notNull(),
+  conversationId: text("conversation_id").notNull(),
+  serviceUrl: text("service_url").notNull(),
+  tenantId: text("tenant_id"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Approval cards sent to approvers, so they can be updated once the step is decided. */
+export const teamsCardMessages = pgTable("teams_card_messages", {
+  stepId: uuid("step_id")
+    .primaryKey()
+    .references((): AnyPgColumn => approvalSteps.id),
+  userId: uuid("user_id")
+    .notNull()
+    .references((): AnyPgColumn => users.id),
+  activityId: text("activity_id").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
+});
+
+// ---------------------------------------------------------------------------
+// Files (ARCHITECTURE.md D9): bytes live in the FileStore; the database keeps metadata only
+// ---------------------------------------------------------------------------
+
+export const files = pgTable(
+  "files",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: fileKind("kind").notNull(),
+    /** Key in the FileStore (local disk in dev; Azure Blob / SharePoint in Azure). */
+    storageKey: text("storage_key").notNull().unique(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    /** Visibility context (ARCHITECTURE.md §3.7): job-tied files follow the job. */
+    jobId: uuid("job_id").references(() => jobs.id),
+    applicationId: uuid("application_id").references(() => applications.id),
+    candidateId: uuid("candidate_id").references(() => candidates.id),
+    brandId: uuid("brand_id").references(() => brands.id),
+    createdById: uuid("created_by_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the bytes were removed (anonymization or retention). The row stays for history. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("files_candidate_idx").on(t.candidateId), index("files_application_idx").on(t.applicationId)],
+);
+
+/** Word offer letter templates with merge fields, scoped by brand and language. */
+export const offerLetterTemplates = pgTable("offer_letter_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  /** Null = available to every brand. */
+  brandId: uuid("brand_id").references(() => brands.id),
+  locale: locale("locale").notNull().default("en"),
+  fileId: uuid("file_id")
+    .notNull()
+    .references(() => files.id),
+  active: boolean("active").notNull().default(true),
+  createdById: uuid("created_by_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ---------------------------------------------------------------------------
 // Localization
@@ -772,6 +1213,7 @@ export const applicationsRelations = relations(applications, ({ one, many }) => 
   scorecards: many(scorecards),
   offers: many(offers),
   stageEvents: many(applicationStageEvents),
+  answers: many(applicationAnswers),
 }));
 
 export const applicationStageEventsRelations = relations(applicationStageEvents, ({ one }) => ({
@@ -805,6 +1247,7 @@ export const scorecardsRelations = relations(scorecards, ({ one }) => ({
 
 export const offersRelations = relations(offers, ({ one }) => ({
   application: one(applications, { fields: [offers.applicationId], references: [applications.id] }),
+  letter: one(files, { fields: [offers.letterFileId], references: [files.id] }),
   opening: one(openings, { fields: [offers.openingId], references: [openings.id] }),
   createdBy: one(users, { fields: [offers.createdById], references: [users.id] }),
 }));
@@ -842,4 +1285,71 @@ export const schedulingLinksRelations = relations(schedulingLinks, ({ one }) => 
   application: one(applications, { fields: [schedulingLinks.applicationId], references: [applications.id] }),
   stage: one(jobStages, { fields: [schedulingLinks.stageId], references: [jobStages.id] }),
   createdBy: one(users, { fields: [schedulingLinks.createdById], references: [users.id] }),
+}));
+
+export const offerLetterTemplatesRelations = relations(offerLetterTemplates, ({ one }) => ({
+  brand: one(brands, { fields: [offerLetterTemplates.brandId], references: [brands.id] }),
+  file: one(files, { fields: [offerLetterTemplates.fileId], references: [files.id] }),
+}));
+
+export const applicationQuestionsRelations = relations(applicationQuestions, ({ one }) => ({
+  job: one(jobs, { fields: [applicationQuestions.jobId], references: [jobs.id] }),
+}));
+
+export const applicationAnswersRelations = relations(applicationAnswers, ({ one }) => ({
+  application: one(applications, { fields: [applicationAnswers.applicationId], references: [applications.id] }),
+  question: one(applicationQuestions, { fields: [applicationAnswers.questionId], references: [applicationQuestions.id] }),
+}));
+
+export const referralsRelations = relations(referrals, ({ one }) => ({
+  referrer: one(users, { fields: [referrals.referrerId], references: [users.id] }),
+  application: one(applications, { fields: [referrals.applicationId], references: [applications.id] }),
+  job: one(jobs, { fields: [referrals.jobId], references: [jobs.id] }),
+}));
+
+export const talentPoolsRelations = relations(talentPools, ({ one, many }) => ({
+  brand: one(brands, { fields: [talentPools.brandId], references: [brands.id] }),
+  owner: one(users, { fields: [talentPools.ownerId], references: [users.id] }),
+  members: many(talentPoolMembers),
+}));
+
+export const talentPoolMembersRelations = relations(talentPoolMembers, ({ one }) => ({
+  pool: one(talentPools, { fields: [talentPoolMembers.poolId], references: [talentPools.id] }),
+  candidate: one(candidates, { fields: [talentPoolMembers.candidateId], references: [candidates.id] }),
+  addedBy: one(users, { fields: [talentPoolMembers.addedById], references: [users.id] }),
+}));
+
+export const savedReportsRelations = relations(savedReports, ({ one, many }) => ({
+  owner: one(users, { fields: [savedReports.ownerId], references: [users.id] }),
+  shares: many(savedReportShares),
+}));
+
+export const savedReportSharesRelations = relations(savedReportShares, ({ one }) => ({
+  report: one(savedReports, { fields: [savedReportShares.reportId], references: [savedReports.id] }),
+  user: one(users, { fields: [savedReportShares.userId], references: [users.id] }),
+}));
+
+export const reportDashboardsRelations = relations(reportDashboards, ({ one, many }) => ({
+  owner: one(users, { fields: [reportDashboards.ownerId], references: [users.id] }),
+  shares: many(reportDashboardShares),
+  items: many(reportDashboardItems),
+}));
+
+export const reportDashboardSharesRelations = relations(reportDashboardShares, ({ one }) => ({
+  dashboard: one(reportDashboards, { fields: [reportDashboardShares.dashboardId], references: [reportDashboards.id] }),
+  user: one(users, { fields: [reportDashboardShares.userId], references: [users.id] }),
+}));
+
+export const reportDashboardItemsRelations = relations(reportDashboardItems, ({ one }) => ({
+  dashboard: one(reportDashboards, { fields: [reportDashboardItems.dashboardId], references: [reportDashboards.id] }),
+  report: one(savedReports, { fields: [reportDashboardItems.reportId], references: [savedReports.id] }),
+}));
+
+export const reportFeedTokensRelations = relations(reportFeedTokens, ({ one }) => ({
+  user: one(users, { fields: [reportFeedTokens.userId], references: [users.id] }),
+}));
+
+export const reportSchedulesRelations = relations(reportSchedules, ({ one }) => ({
+  report: one(savedReports, { fields: [reportSchedules.reportId], references: [savedReports.id] }),
+  owner: one(users, { fields: [reportSchedules.ownerId], references: [users.id] }),
 }));

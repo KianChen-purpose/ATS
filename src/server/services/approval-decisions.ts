@@ -26,6 +26,13 @@ export async function decideApproval(actor: Actor, d: z.output<typeof decisionSc
   });
 
   const { request, outcome, nextApproverId } = result;
+  // Cards already in Teams lose their buttons (decided here or in Teams).
+  try {
+    const { refreshRequestCards } = await import("./teams-bot");
+    await refreshRequestCards(request.id);
+  } catch (e) {
+    console.error("[teams] card refresh failed:", (e as Error).name);
+  }
   const url = request.subject === "job" ? `/jobs/${request.subjectId}` : `/offers`;
   if (nextApproverId) {
     await notifyApprover(nextApproverId, `${request.subject === "job" ? "Job" : "Offer"} approval needed`, "An approval is waiting for you in PATS.", url);

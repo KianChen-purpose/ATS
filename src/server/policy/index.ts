@@ -53,6 +53,19 @@ export function canViewSettings(actor: UserActor) {
   return actor.role === "admin";
 }
 
+/** Reports and analytics: everyone but interviewers. Every number is still trimmed to visible jobs. */
+export function canViewReports(actor: UserActor) {
+  return actor.role !== "interviewer";
+}
+
+/**
+ * Per-person analytics (recruiter productivity, interviewer load and calibration). These rate named
+ * colleagues, so hiring managers don't see them even for their own jobs.
+ */
+export function canViewTeamAnalytics(actor: UserActor) {
+  return BROAD_ROLES.has(actor.role);
+}
+
 /** Blind feedback: may this actor see other people's scorecards on an application? */
 export function canSeeOthersFeedback(actor: UserActor, submittedOwn: boolean) {
   return actor.role !== "interviewer" || submittedOwn;

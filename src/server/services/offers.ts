@@ -16,6 +16,7 @@ import { applyStageMove } from "./applications";
 import { cancelPendingApprovals, latestApprovals, notifyApprover, startApproval } from "./approvals";
 import { recordAudit } from "./audit";
 import { sendAndLogEmail } from "./email";
+import { generateOfferLetter } from "./offer-letters";
 import type { Tx } from "./tx";
 
 /**
@@ -191,8 +192,19 @@ export async function sendOffer(actor: Actor, offerId: string) {
     sender: user.name,
     startDate: offer.startDate ? fmt(offer.startDate + "T12:00:00Z", locale === "fr-CA" ? "d MMMM yyyy" : "MMMM d, yyyy") : null,
   });
+  // A fresh letter for the current terms, attached to the email.
+  const letter = await generateOfferLetter(actor, offer.id);
   // Send first; if the email fails the offer stays "approved" and can be retried.
-  await sendAndLogEmail(actor, { candidateId: c.id, applicationId: offer.applicationId, from: user.email, to: c.email, subject: mail.subject, body: mail.body, auditAction: "offer.email_sent" });
+  await sendAndLogEmail(actor, {
+    candidateId: c.id,
+    applicationId: offer.applicationId,
+    from: user.email,
+    to: c.email,
+    subject: mail.subject,
+    body: mail.body,
+    auditAction: "offer.email_sent",
+    attachments: [{ fileId: letter.file.id, name: letter.file.fileName, contentType: letter.file.contentType, bytes: letter.bytes }],
+  });
   await db.transaction((tx) => markOfferSent(tx, user, offer.id));
   return { candidateId: c.id };
 }

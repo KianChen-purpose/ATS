@@ -7,6 +7,8 @@ import { getJobApproval, getJobDetail, getPipeline, pipelineCounts } from "@/ser
 import { ApprovalDecision } from "@/components/approvals/approval-decision";
 import { ApprovalSteps } from "@/components/approvals/approval-steps";
 import { AddOpeningsButton, CloseOpeningButton } from "@/components/jobs/openings-controls";
+import { QuestionBuilder } from "@/components/jobs/question-builder";
+import { listQuestions } from "@/server/services/application-forms";
 import { getProfileOptions, viewCandidateProfile } from "@/server/services/candidates";
 import { canManageRecruiting } from "@/server/policy";
 import { PageHeader } from "@/components/ui/page-header";
@@ -49,7 +51,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
   const job = await getJobDetail(user, id);
   if (!job) notFound();
   const canManage = canManageRecruiting(user);
-  const approval = await getJobApproval(user, id);
+  const [approval, questions] = await Promise.all([getJobApproval(user, id), listQuestions(user, id)]);
 
   const [apps, counts, options] = await Promise.all([getPipeline(user, id, status), pipelineCounts(user, id), getProfileOptions(user)]);
   const panelCandidateId = str("c");
@@ -109,6 +111,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
             { key: "details", label: "Job details" },
             { key: "plan", label: "Interview plan", count: job.stages.length },
             { key: "openings", label: "Openings & team", count: job.openings.length },
+            { key: "form", label: "Application form", count: questions.filter((q) => q.active).length },
           ]}
         />
       </PageHeader>
@@ -272,6 +275,12 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
                 ))}
             </ul>
           </Card>
+        </div>
+      )}
+
+      {tab === "form" && (
+        <div className="mx-auto w-full max-w-3xl px-6 py-6">
+          <QuestionBuilder jobId={job.id} questions={questions} canManage={canManage} />
         </div>
       )}
 

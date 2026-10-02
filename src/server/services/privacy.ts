@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db, schema as s } from "@/db";
 import { actorUserId, canAdministerPrivacy, ForbiddenError, NotFoundError, type Actor } from "@/server/policy";
 import { recordAudit } from "./audit";
+import { markCandidateFilesDeleted, removeStoredFiles } from "./files";
 
 /**
  * Privacy & compliance services (ARCHITECTURE.md §5): consent, data subject requests and
@@ -105,6 +106,7 @@ export async function anonymizeCandidate(actor: Actor, candidateId: string, opts
   const appIds = candidate.applications.map((a) => a.id);
   const now = new Date();
 
+  let removedKeys: string[] = [];
   await db.transaction(async (tx) => {
     for (const app of active) {
       await tx.update(s.applications).set({ status: "archived", archivedAt: now }).where(eq(s.applications.id, app.id));
@@ -127,6 +129,7 @@ export async function anonymizeCandidate(actor: Actor, candidateId: string, opts
         tags: [],
         resumeText: null,
         resumeFileName: null,
+        resumeFileId: null,
         timezone: null,
         anonymizedAt: now,
         updatedAt: now,
@@ -141,23 +144,33 @@ export async function anonymizeCandidate(actor: Actor, candidateId: string, opts
     await tx
       .update(s.activities)
       .set({ body: null })
-      .where(and(eq(s.activities.candidateId, candidateId), inArray(s.activities.type, ["note", "email"])));
+      .where(and(eq(s.activities.candidateId, candidateId), inArray(s.activities.type, ["note", "email", "application_created"])));
     if (appIds.length) {
       await tx.update(s.scorecards).set({ notes: null }).where(inArray(s.scorecards.applicationId, appIds));
       await tx.update(s.offers).set({ notes: null }).where(inArray(s.offers.applicationId, appIds));
+      await tx.update(s.applicationAnswers).set({ value: null }).where(inArray(s.applicationAnswers.applicationId, appIds));
+      await tx.update(s.referrals).set({ note: null, relationship: null }).where(inArray(s.referrals.applicationId, appIds));
       // Interview titles are "Stage – Candidate Name": keep the stage.
       await tx
         .update(s.interviews)
         .set({ title: sql`split_part(${s.interviews.title}, ' – ', 1)` })
         .where(inArray(s.interviews.applicationId, appIds));
     }
+    // Generated letters and other files about the person: rows stay, bytes go after commit.
+    removedKeys = await markCandidateFilesDeleted(tx, candidateId);
     if (opts.dsrId) {
       await tx
         .update(s.dataSubjectRequests)
         .set({ status: "completed", completedAt: now, candidateId })
         .where(eq(s.dataSubjectRequests.id, opts.dsrId));
     }
-    await recordAudit(tx, actor, "candidate.anonymized", "candidate", candidateId, { reason: opts.reason, dsrId: opts.dsrId ?? null, archivedApplications: active.length });
+    await recordAudit(tx, actor, "candidate.anonymized", "candidate", candidateId, {
+      reason: opts.reason,
+      dsrId: opts.dsrId ?? null,
+      archivedApplications: active.length,
+      filesRemoved: removedKeys.length,
+    });
   });
+  await removeStoredFiles(removedKeys);
   return { alreadyAnonymized: false as const };
 }

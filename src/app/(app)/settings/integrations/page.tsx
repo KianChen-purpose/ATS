@@ -1,9 +1,13 @@
-import { CheckCircle2, CircleDashed, Mail, CalendarDays, MessageSquare, FolderOpen, ShieldCheck, BarChart3 } from "lucide-react";
+import { CheckCircle2, Mail, CalendarDays, MessageSquare, FolderOpen, ShieldCheck, BarChart3 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { canViewSettings } from "@/server/policy";
 import { listIntegrationEvents } from "@/server/services/users";
 import { requireActor } from "@/lib/session";
 import { m365Configured } from "@/server/integrations/m365";
+import { queueStats } from "@/server/integrations/queue";
+import { mailSyncStatus } from "@/server/services/mail-sync";
+import { teamsStatus } from "@/server/services/teams-app";
+import { buttonClass } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 import { Card, CardHeader, EmptyState } from "@/components/ui/card";
@@ -13,19 +17,19 @@ import { timeAgo } from "@/lib/utils";
 export const metadata = { title: "Integrations" };
 
 const SERVICES = [
-  { key: "directory", name: "Entra ID", icon: ShieldCheck, desc: "SSO, MFA, SCIM user provisioning, manager hierarchy", status: "phase" as const, phase: "Phase 6" },
+  { key: "directory", name: "Entra ID", icon: ShieldCheck, desc: "Microsoft sign-in, MFA via Conditional Access, SCIM provisioning (Settings → Identity)", status: "ready" as const },
   { key: "mail", name: "Outlook Mail", icon: Mail, desc: "Send candidate email from your mailbox or careers@, sync replies", status: "ready" as const },
   { key: "calendar", name: "Outlook Calendar", icon: CalendarDays, desc: "Free/busy, create and cancel interview events, rooms", status: "ready" as const },
   { key: "teams", name: "Microsoft Teams", icon: MessageSquare, desc: "Teams meeting links on interviews, notifications and approvals", status: "ready" as const },
-  { key: "sharepoint", name: "SharePoint & Word", icon: FolderOpen, desc: "Resume and offer letter storage, Word offer templates", status: "phase" as const, phase: "Phase 3" },
-  { key: "powerbi", name: "Power BI & Excel", icon: BarChart3, desc: "Refreshable OData feed and certified dataset", status: "phase" as const, phase: "Phase 5" },
+  { key: "sharepoint", name: "SharePoint & Word", icon: FolderOpen, desc: "Word offer templates and letters (FileStore); SharePoint library adapter later", status: "ready" as const },
+  { key: "powerbi", name: "Power BI & Excel", icon: BarChart3, desc: "Refreshable OData feed (Reports → Power BI)", status: "ready" as const },
 ];
 
 export default async function IntegrationsPage() {
   const user = await requireActor();
   if (!canViewSettings(user)) notFound();
   const live = m365Configured();
-  const events = await listIntegrationEvents(user);
+  const [events, jobs, sync, teams] = await Promise.all([listIntegrationEvents(user), queueStats(), mailSyncStatus(), teamsStatus()]);
 
   return (
     <>
@@ -50,28 +54,76 @@ export default async function IntegrationsPage() {
           {SERVICES.map((svc) => (
             <Card key={svc.key} className="p-4">
               <div className="flex items-start gap-3">
-                <div className="rounded-md bg-sky-50 p-2 text-sky-700">
+                <div className="rounded-md bg-zinc-100 p-2 text-zinc-800">
                   <svc.icon size={18} />
                 </div>
                 <div className="min-w-0">
                   <div className="font-semibold">{svc.name}</div>
                   <div className="mt-0.5 text-xs text-zinc-500">{svc.desc}</div>
                   <div className="mt-2">
-                    {svc.status === "ready" ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-                        <CheckCircle2 size={13} /> {live ? "Connected" : "Ready (mock)"}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
-                        <CircleDashed size={13} /> {svc.phase}
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                      <CheckCircle2 size={13} /> {live ? "Connected" : "Ready (mock)"}
+                    </span>
                   </div>
                 </div>
               </div>
             </Card>
           ))}
         </div>
+
+        <Card>
+          <CardHeader
+            title="Microsoft Teams app"
+            action={
+              <a href="/api/teams/app-package" className={buttonClass("secondary", "sm")} download>
+                Download app package
+              </a>
+            }
+          />
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3 text-[13px]">
+            <span>
+              Bot: {teams.botConfigured ? <Badge tone="green">Connected</Badge> : <Badge tone="amber">Mock (set TEAMS_BOT_APP_ID / TEAMS_BOT_APP_SECRET)</Badge>}
+            </span>
+            <span>
+              Installed by <strong>{teams.installedUsers}</strong> {teams.installedUsers === 1 ? "person" : "people"}
+            </span>
+          </div>
+          <p className="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
+            Upload the package in the Teams admin center and pre-install it for PATS users. Approvers then get an Adaptive Card for each approval and can approve or reject in Teams; the card updates when the step is decided anywhere. Messaging endpoint for the Azure Bot: <code>{"<APP_URL>"}/api/teams/messages</code>.
+          </p>
+        </Card>
+
+        <Card>
+          <CardHeader title="Mail sync & background jobs" />
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3 text-[13px] md:grid-cols-4">
+            <div>
+              <dt className="text-xs text-zinc-500">Mailbox subscriptions</dt>
+              <dd className="font-medium">
+                {sync.subscriptions}
+                {sync.expiring > 0 && <span className="ml-1 text-xs font-normal text-amber-800">({sync.expiring} renewing)</span>}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-zinc-500">Last delta sync</dt>
+              <dd className="font-medium">{sync.lastSyncedAt ? timeAgo(sync.lastSyncedAt) : "Not yet"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-zinc-500">Jobs queued / running</dt>
+              <dd className="font-medium">
+                {jobs.queued ?? 0} / {jobs.running ?? 0}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-zinc-500">Failed (dead-lettered)</dt>
+              <dd className={jobs.dead ? "font-medium text-red-700" : "font-medium"}>{jobs.dead ?? 0}</dd>
+            </div>
+          </dl>
+          <p className="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
+            {live
+              ? "Candidate replies to careers@ and to emails sent from PATS are synced into the candidate's Emails tab by the worker (npm run worker). Other mail in users' mailboxes is never read into PATS."
+              : "Mock mode: there's no real inbox. Use “Simulate reply” on a sent email in a candidate's Emails tab to demo two-way email."}
+          </p>
+        </Card>
 
         <Card>
           <CardHeader title="Integration activity" />

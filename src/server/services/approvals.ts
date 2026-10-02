@@ -263,5 +263,13 @@ export async function myPendingSteps(actor: UserActor) {
 /** Teams nudge to whoever's turn it is. Call after the transaction commits. */
 export async function notifyApprover(approverId: string, title: string, text: string, url: string) {
   const u = await db.query.users.findFirst({ where: eq(s.users.id, approverId) });
-  if (u) await m365().teams.notify({ toEmail: u.email, title, text, url });
+  if (!u) return;
+  await m365().teams.notify({ toEmail: u.email, title, text, url });
+  // Approvers with the PATS Teams app also get an actionable card. Never blocks the approval itself.
+  try {
+    const { sendApprovalCards } = await import("./teams-bot");
+    await sendApprovalCards(approverId);
+  } catch (e) {
+    console.error("[teams] approval card not sent:", (e as Error).name);
+  }
 }

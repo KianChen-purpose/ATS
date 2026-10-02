@@ -27,6 +27,10 @@ With `PATS_DEMO_AUTH=true` (the `.env.example` default), sign in from the demo l
 
 Demo sign-in only works outside production: the server refuses to start if `PATS_DEMO_AUTH=true` with `NODE_ENV=production`, or if `SESSION_SECRET` is missing, shorter than 32 characters or still the example value.
 
+Reports live at `/reports`: standard reports, a point-in-time pipeline snapshot, a custom report builder with saved reports and dashboards, Excel/CSV export, scheduled email delivery (run `npm run worker`) and a Power BI / Excel OData feed (`/api/odata`, see [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md)).
+
+Public career sites run at `/careers` (all brands) and `/careers/<brand>` (e.g. `/careers/steadyhand`, `?lang=fr` for French). Brand websites can embed roles from `GET /api/public/jobs?brand=<slug>&lang=en|fr`.
+
 ## Scripts
 
 | Command | What it does |
@@ -38,6 +42,7 @@ Demo sign-in only works outside production: the server refuses to start if `PATS
 | `npm run db:seed` | Wipe and reload demo data (deterministic) |
 | `npm run db:reset` | Local only: drop the database, migrate from scratch, reseed |
 | `npm test` | Run the test suite (vitest) against a throwaway `pats_test` Postgres database, built from the migrations |
+| `npm run worker` | Background worker: job queue (mail sync, Graph subscriptions) and scheduled reports. `-- --once` for one pass |
 | `npm run typecheck` / `npm run lint` | Checks |
 
 ## Microsoft 365
@@ -71,10 +76,10 @@ Per [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §10, foundation hardening come
 |---|---|---|
 | 0 | Foundation: schema, demo data, app shell, ⌘K, demo auth, M365 integration layer | ✅ |
 | 1 | Core ATS: jobs, pipeline board/table, candidate profiles, notes, stage moves, archive | ✅ |
-| 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards, interviews hub | ✅ (built; being moved onto the service layer) |
-| **H** | **Foundation hardening:** service and policy layers, authorization fixes, audit (incl. view logging), immutable history, versioned migrations, demo-auth guard, consent/retention schema, tests and CI | 🚧 now |
-| 3 | Offers, approvals, headcount & openings, Word offer letters | ⏳ after H |
-| 4 | Career sites (multi-brand, EN/FR), applications, referrals, sourcing & CRM | ⏳ |
-| 5 | Reporting: standard reports, custom builder, Excel/Power BI | ⏳ |
-| 6 | Live M365: Entra SSO/SCIM, Graph mail sync, Teams app & approvals (SSO can go live earlier, once tenant consent is ready) | ⏳ |
+| 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards, interviews hub | ✅ |
+| **H** | **Foundation hardening:** service and policy layers, authorization fixes, audit (incl. view logging), immutable history, versioned migrations, demo-auth guard, consent/retention schema, tests and CI | ✅ |
+| 3 | Offers, approval chains (jobs + offers), approvals inbox, openings, Word offer letters (EN/FR-CA) | ✅ |
+| 4 | Career sites (multi-brand, EN/FR) + public jobs API, applications with questions/consent/resumes, referrals, talent pools & prospects | ✅ (agency portal, email sequences, browser extension later) |
+| 5 | Reporting: standard reports, drill-down, point-in-time snapshot, custom builder, saved reports & dashboards, Excel/CSV export, scheduled delivery, Power BI OData feed | ✅ (diversity reports, candidate NPS, agency spend later) |
+| 6 | Live M365: Entra SSO (delegated Graph), SCIM provisioning, queue + two-way mail sync, Teams app with approval cards | ✅ (needs tenant consent, an Azure Bot and a public https URL to go live) |
 | 7 | AI assist: application review, notes, summaries, drafting | ⏳ |

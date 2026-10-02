@@ -17,6 +17,29 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "teams_card_messages",
+    "teams_conversations",
+    "job_queue",
+    "graph_subscriptions",
+    "mail_sync_state",
+    "scim_group_members",
+    "scim_groups",
+    "scim_tokens",
+    "user_oauth_tokens",
+    "report_schedules",
+    "report_feed_tokens",
+    "report_dashboard_items",
+    "report_dashboard_shares",
+    "report_dashboards",
+    "saved_report_shares",
+    "saved_reports",
+    "talent_pool_members",
+    "talent_pools",
+    "referrals",
+    "application_answers",
+    "application_questions",
+    "offer_letter_templates",
+    "files",
     "approval_steps",
     "approval_requests",
     "approval_chain_steps",
@@ -51,6 +74,10 @@ async function reset() {
     "brands",
   ];
   await db.execute(sql.raw(`TRUNCATE ${tables.join(", ")} CASCADE`));
+  // Local FileStore holds only demo files; start it fresh too.
+  const { rm } = await import("node:fs/promises");
+  const path = await import("node:path");
+  await rm(path.resolve(process.env.FILE_STORE_DIR ?? ".storage"), { recursive: true, force: true });
 }
 
 const BRANDS = [
@@ -169,6 +196,7 @@ const ARCHIVE_REASONS: { name: string; category: (typeof s.archiveCategory.enumV
   { name: "Candidate withdrew", category: "withdrew" },
   { name: "Accepted another offer", category: "withdrew" },
   { name: "Unresponsive", category: "other" },
+  { name: "Knockout question", category: "rejected" },
 ];
 
 const SKILLS_BY_DEPT: Record<string, string[]> = {
@@ -282,9 +310,35 @@ async function main() {
     { approverType: "user", approverId: cfo },
   ]);
 
+  console.log("Creating offer letter templates…");
+  {
+    const { createHash, randomUUID } = await import("node:crypto");
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    const { buildDefaultLetterTemplate } = await import("./letter-templates");
+    const root = path.resolve(process.env.FILE_STORE_DIR ?? ".storage");
+    for (const [locale, name] of [["en", "Standard offer letter"], ["fr-CA", "Lettre d'offre standard"]] as const) {
+      const bytes = await buildDefaultLetterTemplate(locale);
+      const id = randomUUID();
+      const storageKey = `offer_letter_template/${id.slice(0, 2)}/${id}`;
+      await mkdir(path.dirname(path.join(root, storageKey)), { recursive: true });
+      await writeFile(path.join(root, storageKey), bytes);
+      await db.insert(s.files).values({
+        id,
+        kind: "offer_letter_template",
+        storageKey,
+        fileName: `${name}.docx`,
+        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        sizeBytes: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      });
+      await db.insert(s.offerLetterTemplates).values({ name, locale, fileId: id });
+    }
+  }
+
   console.log("Creating jobs…");
   let openingSeq = 1000;
-  const jobRows: { job: typeof s.jobs.$inferSelect; stages: (typeof s.jobStages.$inferSelect)[]; dept: string; team: typeof users }[] = [];
+  const jobRows: { job: typeof s.jobs.$inferSelect; stages: (typeof s.jobStages.$inferSelect)[]; dept: string; team: typeof users; openings: number }[] = [];
   for (const j of JOBS) {
     const status = j.status ?? "open";
     const openedDaysAgo = faker.number.int({ min: 20, max: 140 });
@@ -317,14 +371,39 @@ async function main() {
       Array.from({ length: j.openings ?? 1 }, () => ({
         jobId: job.id,
         code: `REQ-${openingSeq++}`,
+        createdAt: daysAgo(openedDaysAgo),
         reason: pick(["new_headcount", "new_headcount", "backfill"] as const),
         targetStartDate: new Date(now + faker.number.int({ min: 20, max: 120 }) * DAY).toISOString().slice(0, 10),
       })),
     );
     const team = faker.helpers.arrayElements(interviewers.filter((u) => u.id !== job.hiringManagerId), 3);
     await db.insert(s.jobHiringTeam).values(team.map((u) => ({ jobId: job.id, userId: u.id })));
-    jobRows.push({ job, stages, dept: j.dept, team });
+    jobRows.push({ job, stages, dept: j.dept, team, openings: j.openings ?? 1 });
     if (job.publishedOnCareerSite) {
+      await db.insert(s.applicationQuestions).values([
+        {
+          jobId: job.id,
+          position: 0,
+          kind: "yes_no",
+          labelEn: "Are you legally entitled to work in Canada?",
+          labelFr: "Êtes-vous légalement autorisé(e) à travailler au Canada?",
+          required: true,
+          passAnswers: ["yes"],
+        },
+        {
+          jobId: job.id,
+          position: 1,
+          kind: "single_select",
+          labelEn: "How did you hear about this role?",
+          labelFr: "Comment avez-vous entendu parler de ce poste?",
+          options: [
+            { value: "linkedin", en: "LinkedIn", fr: "LinkedIn" },
+            { value: "referral", en: "Someone who works here", fr: "Une personne qui travaille ici" },
+            { value: "website", en: "Our website", fr: "Notre site Web" },
+            { value: "other", en: "Somewhere else", fr: "Ailleurs" },
+          ],
+        },
+      ]);
       await db.insert(s.jobTranslations).values({
         jobId: job.id,
         locale: "fr-CA",
@@ -338,9 +417,12 @@ async function main() {
   const activeJobs = jobRows.filter((r) => r.job.status !== "draft");
   // Funnel shape: how far applications progress. Index = furthest stage position reached.
   const reachWeights = [6, 34, 22, 15, 9, 7, 4, 3];
+  // Older applications have had time to finish, so more of them reached offer and hire.
+  const hiresByJob = new Map<string, number>();
+  const matureReachWeights = [4, 24, 20, 16, 11, 9, 6, 10];
 
   for (let i = 0; i < 320; i++) {
-    const { job, stages, dept, team } = pick(activeJobs);
+    const { job, stages, dept, team, openings } = pick(activeJobs);
     const firstName = faker.person.firstName();
     const lastName = faker.person.lastName();
     const skills = faker.helpers.arrayElements(SKILLS_BY_DEPT[dept] ?? ["Communication"], { min: 2, max: 4 });
@@ -387,19 +469,24 @@ async function main() {
 
     // Sourced candidates start at Lead; inbound at Application Review.
     const startPos = source.category === "sourced" ? 0 : 1;
-    let reach = Math.max(startPos, weightedPick([0, 1, 2, 3, 4, 5, 6, 7], reachWeights));
+    let reach = Math.max(startPos, weightedPick([0, 1, 2, 3, 4, 5, 6, 7], appliedAgo > 40 ? matureReachWeights : reachWeights));
     if (job.status === "on_hold") reach = Math.min(reach, 3);
+    // A job can't hire more people than it has openings.
+    if (reach === 7 && (hiresByJob.get(job.id) ?? 0) >= openings) reach = 5;
+    if (reach === 7) hiresByJob.set(job.id, (hiresByJob.get(job.id) ?? 0) + 1);
 
     // Walk through stages, spreading time across the elapsed window.
     const path = stages.filter((st) => st.position >= startPos && st.position <= reach);
-    const stepDays = appliedAgo / (path.length + 1);
-    const events: (typeof s.applicationStageEvents.$inferInsert)[] = [];
-    const recruiter = job.recruiterId!;
-    let t = appliedAgo;
-
     const isHired = reach === 7;
     // Applications that stopped before the end: most are archived, recent ones are still active.
     const archived = !isHired && (appliedAgo > 12 ? faker.number.float() < 0.62 : faker.number.float() < 0.15);
+    // Finished applications (hired or archived) took a few weeks and ended in the past; active
+    // ones are spread across their whole elapsed time, so they're still in motion today.
+    const span = isHired || archived ? Math.min(appliedAgo, faker.number.int({ min: 10, max: 50 })) : appliedAgo;
+    const stepDays = span / (path.length + 1);
+    const events: (typeof s.applicationStageEvents.$inferInsert)[] = [];
+    const recruiter = job.recruiterId!;
+    let t = appliedAgo;
     const currentStage = path[path.length - 1];
 
     const [app] = await db
@@ -584,13 +671,14 @@ async function main() {
         .values({
           applicationId: app.id,
           status: offerStatus,
-          baseSalary: Math.round(faker.number.int({ min: job.compMin!, max: job.compMax! }) / 1000) * 1000,
+          baseSalary: Math.round(faker.number.int({ min: Math.round(job.compMin! * 0.95), max: Math.round(job.compMax! * 1.06) }) / 1000) * 1000,
           bonusPercent: pick([10, 15, 20]),
           startDate: new Date(now + faker.number.int({ min: 14, max: 60 }) * DAY).toISOString().slice(0, 10),
           createdById: recruiter,
           createdAt: offerAt,
           sentAt: ["sent", "accepted", "declined"].includes(offerStatus) ? new Date(offerAt.getTime() + 2 * DAY) : null,
-          decidedAt: ["accepted", "declined"].includes(offerStatus) ? new Date(offerAt.getTime() + 5 * DAY) : null,
+          decidedAt: ["accepted", "declined"].includes(offerStatus) ? new Date(offerAt.getTime() + faker.number.int({ min: 3, max: 9 }) * DAY) : null,
+          declineReason: offerStatus === "declined" ? pick(["Accepted another offer", "Compensation", "Compensation", "Counter-offer from current employer", "Role scope", "Relocation"]) : null,
         })
         .returning();
       const chain = offer.baseSalary >= 200_000 ? seniorOfferChain : offerChain;
@@ -647,6 +735,8 @@ async function main() {
         body: `Hi ${firstName},\n\nThanks for applying! I'd love to set up a quick call to chat about the ${job.title} role.\n\nBest,\n${sender.name}`,
         sentById: sender.id,
         sentAt,
+        externalThreadId: `AAQkConv-${faker.string.alphanumeric(16)}`,
+        externalMessageId: `AAMkMsg-${faker.string.alphanumeric(16)}`,
       });
       acts.push({
         candidateId: cand.id,
@@ -667,15 +757,70 @@ async function main() {
     await db.insert(s.activities).values(acts);
   }
 
-  // Mark openings filled for hires.
+  // Mark openings filled for hires: the nth hire on a job fills its nth opening, on the hire date.
   await db.execute(sql`
-    UPDATE openings o SET status = 'filled', filled_at = now()
-    WHERE o.id IN (
-      SELECT DISTINCT ON (a.id) o2.id FROM applications a
-      JOIN openings o2 ON o2.job_id = a.job_id
-      WHERE a.status = 'hired'
-      ORDER BY a.id, o2.code
-    )`);
+    WITH hires AS (
+      SELECT a.job_id, a.hired_at, row_number() OVER (PARTITION BY a.job_id ORDER BY a.hired_at, a.id) AS n
+      FROM applications a WHERE a.status = 'hired'
+    ), slots AS (
+      SELECT o.id, o.job_id, row_number() OVER (PARTITION BY o.job_id ORDER BY o.code) AS n FROM openings o
+    )
+    UPDATE openings o SET status = 'filled', filled_at = COALESCE(h.hired_at, now())
+    FROM slots sl JOIN hires h ON h.job_id = sl.job_id AND h.n = sl.n
+    WHERE o.id = sl.id`);
+
+  console.log("Creating talent pools…");
+  {
+    const recruiter = userByName["Maya Thompson"];
+    const [eng, cx] = await db
+      .insert(s.talentPools)
+      .values([
+        { name: "Senior engineers – Toronto", description: "Platform and full-stack, for 2027 hiring", ownerId: recruiter.id },
+        { name: "Bilingual client experience", description: "EN/FR client-facing talent", ownerId: userByName["Sophie Tremblay"].id },
+      ])
+      .returning();
+    const prospects = [
+      { firstName: "Imani", lastName: "Okoro", currentTitle: "Staff Engineer", currentCompany: "Wealthsimple", pool: eng.id, stage: "interested" as const },
+      { firstName: "Mateo", lastName: "Silva", currentTitle: "Senior Backend Engineer", currentCompany: "Shopify", pool: eng.id, stage: "contacted" as const },
+      { firstName: "Priya", lastName: "Natarajan", currentTitle: "Engineering Lead", currentCompany: "KOHO", pool: eng.id, stage: "new" as const },
+      { firstName: "Liam", lastName: "Chen", currentTitle: "Platform Engineer", currentCompany: "Questrade", pool: eng.id, stage: "not_interested" as const },
+      { firstName: "Camille", lastName: "Bouchard", currentTitle: "Conseillère principale", currentCompany: "Desjardins", pool: cx.id, stage: "interested" as const },
+      { firstName: "Olivier", lastName: "Roy", currentTitle: "Client Success Manager", currentCompany: "National Bank", pool: cx.id, stage: "new" as const },
+    ];
+    for (const p of prospects) {
+      const [c] = await db
+        .insert(s.candidates)
+        .values({
+          firstName: p.firstName,
+          lastName: p.lastName,
+          email: `${p.firstName}.${p.lastName}@example.org`.toLowerCase(),
+          currentTitle: p.currentTitle,
+          currentCompany: p.currentCompany,
+          ownerId: recruiter.id,
+          preferredLocale: p.pool === cx.id ? "fr-CA" : "en",
+        })
+        .returning();
+      await db.insert(s.talentPoolMembers).values({ poolId: p.pool, candidateId: c.id, stage: p.stage, addedById: recruiter.id });
+      await db.insert(s.activities).values({ candidateId: c.id, type: "note", actorId: recruiter.id, body: "Sourced as a prospect", createdAt: daysAgo(10) });
+    }
+  }
+
+  console.log("Creating saved reports…");
+  {
+    const owner = userByName["Maya Thompson"];
+    const defs = [
+      { name: "Applications per month by source type", description: "Where applications come from, month by month.", definition: { dataset: "applications", dateField: "applied_at", groupBy: ["month", "source_category"], metrics: ["count"], filters: [], visualization: "pivot" } },
+      { name: "Weekly applications", description: null, definition: { dataset: "applications", dateField: "applied_at", groupBy: ["week"], metrics: ["count", "hired"], filters: [], visualization: "line" } },
+      { name: "Hire rate by brand", description: "Hires ÷ applications, for applications in the range.", definition: { dataset: "applications", dateField: "applied_at", groupBy: ["brand"], metrics: ["count", "hired", "hire_rate"], filters: [], visualization: "bar" } },
+      { name: "Offer outcomes by department", description: null, definition: { dataset: "offers", dateField: "created_at", groupBy: ["department"], metrics: ["count", "accepted", "acceptance_rate"], filters: [], visualization: "bar" } },
+    ];
+    const reports = await db
+      .insert(s.savedReports)
+      .values(defs.map((d) => ({ ...d, ownerId: owner.id, visibility: "everyone" as const, filters: { range: "180d" } })))
+      .returning();
+    const [dash] = await db.insert(s.reportDashboards).values({ name: "Recruiting overview", description: "The weekly numbers for the recruiting team.", ownerId: owner.id, visibility: "everyone" }).returning();
+    await db.insert(s.reportDashboardItems).values(reports.map((r, position) => ({ dashboardId: dash.id, reportId: r.id, position })));
+  }
 
   const counts = await db.execute(sql`SELECT
     (SELECT count(*) FROM candidates) AS candidates,

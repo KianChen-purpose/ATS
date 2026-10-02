@@ -4,6 +4,8 @@ import { ApprovalSteps } from "@/components/approvals/approval-steps";
 import { fmt, money } from "@/lib/utils";
 import { OfferActions } from "./offer-actions";
 import { OfferForm } from "./offer-form";
+import { PreviewLetterButton } from "./preview-letter-button";
+import { FileText } from "lucide-react";
 
 const STATUS = {
   draft: { tone: "neutral", label: "Draft" },
@@ -31,6 +33,7 @@ type Offer = {
   openingId: string | null;
   notes: string | null;
   declineReason: string | null;
+  letterFileId: string | null;
   approval: {
     id: string;
     status: string;
@@ -71,6 +74,11 @@ export function OfferCard({
         <div><dt className="text-xs text-zinc-500">Opening</dt><dd>{openingCode ?? "Next open"}</dd></div>
         {o.equity && <div className="col-span-2 sm:col-span-3"><dt className="text-xs text-zinc-500">Equity / LTIP</dt><dd>{o.equity}</dd></div>}
       </dl>
+      {o.letterFileId && (
+        <a href={`/api/files/${o.letterFileId}`} className="mt-2 inline-flex items-center gap-1 text-xs text-accent-700 hover:underline">
+          <FileText size={12} aria-hidden /> Offer letter (.docx)
+        </a>
+      )}
       {o.declineReason && <p className="mt-2 text-xs text-zinc-600">Decline reason: {o.declineReason}</p>}
       {o.notes && canManage && <p className="mt-2 text-xs text-zinc-500">Notes: {o.notes}</p>}
 
@@ -94,6 +102,7 @@ export function OfferCard({
               initial={{ baseSalary: o.baseSalary, bonusPercent: o.bonusPercent, signOnBonus: o.signOnBonus, equity: o.equity, currency: o.currency === "USD" ? "USD" : "CAD", startDate: o.startDate, openingId: o.openingId, notes: o.notes }}
             />
           )}
+          {canManage && o.status === "approved" && <PreviewLetterButton offerId={o.id} />}
           {canManage && <OfferActions offerId={o.id} status={o.status} />}
         </div>
       )}

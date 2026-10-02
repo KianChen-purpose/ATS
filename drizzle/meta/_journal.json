@@ -64,6 +64,83 @@
       "when": 1790904980737,
       "tag": "0008_offer_terms_and_withdrawn",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1790905510728,
+      "tag": "0009_files_and_offer_letters",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1790905547831,
+      "tag": "0010_email_attachments",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1790910181956,
+      "tag": "0011_application_forms",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1790910707228,
+      "tag": "0012_referrals",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1790910961979,
+      "tag": "0013_talent_pools",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1790975331623,
+      "tag": "0014_saved_reports_dashboards",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1790976455952,
+      "tag": "0015_report_feeds_schedules",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790983016190,
+      "tag": "0016_entra_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790983426003,
+      "tag": "0017_scim",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790983837859,
+      "tag": "0018_mail_sync_queue",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790984309784,
+      "tag": "0019_teams_app",
+      "breakpoints": true
     }
   ]
 }

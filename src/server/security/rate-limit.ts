@@ -31,6 +31,8 @@ export const PUBLIC_LIMITS = {
   view: { limit: 60, windowMs: 10 * 60_000 },
   /** Booking attempts. */
   book: { limit: 10, windowMs: 10 * 60_000 },
+  /** Career-site applications per IP. */
+  apply: { limit: 5, windowMs: 10 * 60_000 },
 } as const;
 
 /** Test hook. */

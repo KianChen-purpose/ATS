@@ -27,8 +27,31 @@ export const mockM365: M365Client = {
         mode: "mock",
         recipients: [input.to, ...(input.cc ?? [])],
         ids: res,
+        counts: input.attachments?.length ? { attachments: input.attachments.length } : undefined,
       });
       return res;
+    },
+    // Mock mailboxes are empty: inbound replies are simulated through the mail-sync service instead.
+    async getMessage() {
+      return null;
+    },
+    async delta(mailbox) {
+      await recordIntegrationEvent({ service: "mail", operation: "messages.delta", mode: "mock", counts: { messages: 0 } });
+      return { messages: [], deltaLink: `mock-delta:${mailbox}:${Date.now()}` };
+    },
+  },
+  subscriptions: {
+    async createMail(input) {
+      const res = { id: rid("sub"), expiresAt: input.expiresAt };
+      await recordIntegrationEvent({ service: "mail", operation: "subscriptions.create", mode: "mock", ids: { subscriptionId: res.id } });
+      return res;
+    },
+    async renew(_mailbox, id, expiresAt) {
+      await recordIntegrationEvent({ service: "mail", operation: "subscriptions.renew", mode: "mock", ids: { subscriptionId: id } });
+      return { expiresAt };
+    },
+    async remove(_mailbox, id) {
+      await recordIntegrationEvent({ service: "mail", operation: "subscriptions.delete", mode: "mock", ids: { subscriptionId: id } });
     },
   },
   calendar: {

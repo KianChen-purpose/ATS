@@ -17,6 +17,7 @@ import { InterviewRowActions } from "./interview-row-actions";
 import { DebriefMatrix } from "./debrief-matrix";
 import { OfferCard } from "@/components/offers/offer-card";
 import { OfferForm } from "@/components/offers/offer-form";
+import { SimulateReply } from "./simulate-reply";
 
 type Options = {
   archiveReasons: { id: string; name: string; category: string }[];
@@ -31,6 +32,7 @@ export function CandidateProfileView({
   user,
   selectedAppId,
   appHref,
+  simulateReplies = false,
 }: {
   profile: CandidateProfile;
   options: Options;
@@ -38,6 +40,8 @@ export function CandidateProfileView({
   selectedAppId?: string;
   /** Build a link that selects a different application. */
   appHref: (appId: string) => string;
+  /** Demo (mock mode): offer "Simulate reply" on sent emails. */
+  simulateReplies?: boolean;
 }) {
   const c = profile;
   const name = `${c.firstName} ${c.lastName}`;
@@ -117,6 +121,26 @@ export function CandidateProfileView({
               {app.archiveReason && <span>Archived: <span className="text-zinc-800">{app.archiveReason.name}</span></span>}
               <Link href={`/jobs/${app.jobId}`} className="text-accent-700 hover:underline">View job</Link>
             </div>
+            {app.answers.length > 0 && (
+              <details className="mt-3 rounded-md border border-zinc-200 bg-white">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-zinc-700">
+                  Application answers ({app.answers.length}){app.answers.some((a) => a.knockedOut) && " · knockout"}
+                </summary>
+                <dl className="divide-y divide-zinc-100 border-t border-zinc-100">
+                  {[...app.answers]
+                    .sort((a, b) => a.question.position - b.question.position)
+                    .map((a) => (
+                      <div key={a.id} className="px-3 py-2">
+                        <dt className="text-xs text-zinc-500">{a.question.labelEn}</dt>
+                        <dd className={a.knockedOut ? "font-medium text-red-800" : "text-zinc-900"}>
+                          {a.question.kind === "yes_no" ? (a.value === "yes" ? "Yes" : a.value === "no" ? "No" : "—") : a.question.options.find((o) => o.value === a.value)?.en ?? a.value ?? "—"}
+                          {a.knockedOut && " · knockout"}
+                        </dd>
+                      </div>
+                    ))}
+                </dl>
+              </details>
+            )}
           </div>
         )}
         <div className="mt-3">
@@ -259,7 +283,11 @@ export function CandidateProfileView({
                             {e.direction === "outbound" ? `${e.fromAddress} → ${e.toAddress}` : `${e.fromAddress} → you`}
                           </div>
                         </div>
-                        <span className="shrink-0 text-xs text-zinc-500">{timeAgo(e.sentAt)}</span>
+                        <span className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
+                          {simulateReplies && e.direction === "outbound" && <SimulateReply emailId={e.id} candidateId={c.id} />}
+                          {e.direction === "inbound" && <Badge tone="neutral">Reply</Badge>}
+                          {timeAgo(e.sentAt)}
+                        </span>
                       </div>
                       <div className="px-3 py-2 whitespace-pre-wrap text-zinc-700">{e.body}</div>
                     </div>
@@ -273,13 +301,20 @@ export function CandidateProfileView({
             label: "Resume",
             content: (
               <div className="px-5 py-4">
-                {c.resumeFileName && (
-                  <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-zinc-200 px-2.5 py-1.5">
-                    <FileText size={14} className="text-red-500" /> {c.resumeFileName}
-                  </div>
-                )}
+                {c.resumeFileName &&
+                  (c.resumeFileId ? (
+                    <a href={`/api/files/${c.resumeFileId}`} className="mb-3 inline-flex items-center gap-2 rounded-md border border-zinc-200 px-2.5 py-1.5 hover:bg-zinc-50">
+                      <FileText size={14} className="text-zinc-500" aria-hidden /> {c.resumeFileName} <span className="text-xs text-accent-700">Download</span>
+                    </a>
+                  ) : (
+                    <div className="mb-3 inline-flex items-center gap-2 rounded-md border border-zinc-200 px-2.5 py-1.5">
+                      <FileText size={14} className="text-zinc-500" aria-hidden /> {c.resumeFileName}
+                    </div>
+                  ))}
                 {c.resumeText ? (
                   <pre className="rounded-lg border border-zinc-200 bg-zinc-50 p-4 font-sans whitespace-pre-wrap text-zinc-700">{c.resumeText}</pre>
+                ) : c.resumeFileId ? (
+                  <p className="text-xs text-zinc-500">Resume parsing isn&apos;t set up yet; download the file to read it.</p>
                 ) : (
                   <EmptyState title="No resume on file" />
                 )}

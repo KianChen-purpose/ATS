@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { NAV, SETTINGS_NAV, type NavItem } from "./nav";
 import { signOut } from "@/server/actions/auth";
 
-export function Sidebar({ user }: { user: { name: string; role: string; title: string | null } }) {
+export function Sidebar({ user, approvalsWaiting = 0 }: { user: { name: string; role: string; title: string | null }; approvalsWaiting?: number }) {
   const pathname = usePathname();
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
@@ -34,7 +34,7 @@ export function Sidebar({ user }: { user: { name: string; role: string; title: s
 
       <nav className="flex-1 space-y-0.5 px-2">
         {NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          <NavLink key={item.href} item={item} active={isActive(item.href)} count={item.href === "/approvals" ? approvalsWaiting : undefined} />
         ))}
       </nav>
 
@@ -57,7 +57,7 @@ export function Sidebar({ user }: { user: { name: string; role: string; title: s
   );
 }
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({ item, active, count }: { item: NavItem; active: boolean; count?: number }) {
   const Icon = item.icon;
   return (
     <Link
@@ -69,6 +69,11 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     >
       <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
       {item.label}
+      {count ? (
+        <span className="ml-auto rounded-full bg-accent-600 px-1.5 text-[10px] leading-4 font-semibold text-white" aria-label={`${count} waiting`}>
+          {count}
+        </span>
+      ) : null}
     </Link>
   );
 }

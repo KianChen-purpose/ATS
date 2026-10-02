@@ -5,14 +5,28 @@ import { signInAs } from "@/server/actions/auth";
 import { Avatar } from "@/components/ui/avatar";
 import { PatsLogo } from "@/components/logo";
 import { ROLE_LABELS } from "@/lib/utils";
-import { m365Configured } from "@/server/integrations/m365";
+import { entraConfigured } from "@/server/config";
 
 export const metadata = { title: "Sign in" };
 
 const ROLE_ORDER = ["admin", "recruiter", "coordinator", "hiring_manager", "interviewer", "executive"];
 
-export default async function LoginPage() {
+const ERRORS: Record<string, string> = {
+  state: "That sign-in link expired. Please try again.",
+  token: "Microsoft sign-in didn't complete. Please try again.",
+  denied: "Sign-in was cancelled.",
+  not_provisioned: "You don't have a PATS account yet. Ask your PATS admin for access.",
+  inactive: "Your PATS account is deactivated. Ask your PATS admin.",
+  conflict: "Your email is linked to a different Microsoft account. Ask your PATS admin.",
+  config: "Microsoft sign-in isn't set up on this server yet.",
+};
+
+export default async function LoginPage(props: PageProps<"/login">) {
   await connection(); // render per request: user list and SSO status come from the DB/env
+  const sp = await props.searchParams;
+  const error = typeof sp.error === "string" ? (ERRORS[sp.error] ?? ERRORS.token) : null;
+  const next = typeof sp.next === "string" ? sp.next : "/";
+  const sso = entraConfigured();
   const demo = demoAuthEnabled();
   const users = await listDemoSignInUsers();
   const grouped = ROLE_ORDER.map((role) => ({ role, users: users.filter((u) => u.role === role) })).filter((g) => g.users.length);
@@ -26,13 +40,27 @@ export default async function LoginPage() {
         </div>
 
         <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
-          <button
-            disabled={!m365Configured()}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white font-medium text-zinc-800 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
-            title={m365Configured() ? undefined : "Configure M365_* environment variables to enable Entra ID SSO"}
-          >
-            <MicrosoftIcon /> Sign in with Microsoft
-          </button>
+          {error && (
+            <p role="alert" className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-[13px] text-red-800">
+              {error}
+            </p>
+          )}
+          {sso ? (
+            <a
+              href={`/auth/entra/login?next=${encodeURIComponent(next)}`}
+              className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white font-medium text-zinc-800 hover:bg-zinc-50"
+            >
+              <MicrosoftIcon /> Sign in with Microsoft
+            </a>
+          ) : (
+            <button
+              disabled
+              className="flex h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-md border border-zinc-300 bg-white font-medium text-zinc-800 opacity-50"
+              title="Set the M365_* variables (Entra app registration) to turn on Microsoft sign-in"
+            >
+              <MicrosoftIcon /> Sign in with Microsoft
+            </button>
+          )}
           {demo ? (
             <>
               <div className="my-5 flex items-center gap-3 text-[11px] font-medium tracking-wide text-zinc-400 uppercase">
@@ -47,6 +75,7 @@ export default async function LoginPage() {
                       {g.users.map((u) => (
                         <form key={u.id} action={signInAs}>
                           <input type="hidden" name="userId" value={u.id} />
+                          <input type="hidden" name="next" value={next} />
                           <button className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left hover:bg-zinc-50">
                             <Avatar name={u.name} size={26} />
                             <span className="min-w-0">

@@ -14,7 +14,8 @@
     "db:reset": "tsx src/db/migrate.ts --reset && npm run db:seed",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "worker": "tsx --conditions=react-server --env-file-if-exists=.env src/worker/index.ts"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",
@@ -24,11 +25,13 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
+    "docxtemplater": "^3.71.0",
     "drizzle-orm": "^0.45.3",
     "jose": "^6.2.12",
     "lucide-react": "^1.49.0",
     "next": "16.3.8",
     "pg": "^8.23.1",
+    "pizzip": "^3.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "^0.0.1",
@@ -42,6 +45,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "docx": "^9.8.1",
     "dotenv": "^18.0.5",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",

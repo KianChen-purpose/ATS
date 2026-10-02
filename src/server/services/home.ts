@@ -9,7 +9,7 @@ export async function getHomeData(actor: UserActor) {
   const now = new Date();
   const weekAhead = new Date(now.getTime() + 7 * 86_400_000);
 
-  const [upcoming, feedbackDue, approvals, myJobs, stats] = await Promise.all([
+  const [upcoming, feedbackDue, myJobs, stats] = await Promise.all([
     // My upcoming interviews
     db
       .select({
@@ -60,35 +60,6 @@ export async function getHomeData(actor: UserActor) {
       .orderBy(sql`${s.interviews.startAt} DESC`)
       .limit(8),
 
-    // Offer approvals waiting on me (all earlier approvers have approved)
-    db
-      .select({
-        approvalId: s.approvalSteps.id,
-        requestId: s.approvalRequests.id,
-        offerId: s.offers.id,
-        baseSalary: s.offers.baseSalary,
-        currency: s.offers.currency,
-        createdAt: s.offers.createdAt,
-        candidateId: s.candidates.id,
-        firstName: s.candidates.firstName,
-        lastName: s.candidates.lastName,
-        jobTitle: s.jobs.title,
-      })
-      .from(s.approvalSteps)
-      .innerJoin(s.approvalRequests, eq(s.approvalRequests.id, s.approvalSteps.requestId))
-      .innerJoin(s.offers, and(eq(s.approvalRequests.subject, "offer"), eq(s.offers.id, s.approvalRequests.subjectId)))
-      .innerJoin(s.applications, eq(s.applications.id, s.offers.applicationId))
-      .innerJoin(s.candidates, eq(s.candidates.id, s.applications.candidateId))
-      .innerJoin(s.jobs, eq(s.jobs.id, s.applications.jobId))
-      .where(
-        and(
-          eq(s.approvalSteps.approverId, userId),
-          eq(s.approvalSteps.status, "pending"),
-          eq(s.approvalRequests.status, "pending"),
-          sql`NOT EXISTS (SELECT 1 FROM approval_steps p WHERE p.request_id = ${s.approvalSteps.requestId} AND p.position < ${s.approvalSteps.position} AND p.status <> 'approved')`,
-        ),
-      ),
-
     // Jobs I own
     db
       .select({
@@ -136,5 +107,5 @@ export async function getHomeData(actor: UserActor) {
     ]).then(([a, b, c, d]) => ({ openJobs: a[0].n, activeCandidates: b[0].n, interviewsThisWeek: c[0].n, openOffers: d[0].n })),
   ]);
 
-  return { upcoming, feedbackDue, approvals, myJobs, stats };
+  return { upcoming, feedbackDue, myJobs, stats };
 }

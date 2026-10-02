@@ -28,6 +28,11 @@ export function sessionSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
+/** Entra ID sign-in is on when the app registration's credentials are set (docs/INTEGRATIONS.md). */
+export function entraConfigured() {
+  return !!(process.env.M365_TENANT_ID && process.env.M365_CLIENT_ID && process.env.M365_CLIENT_SECRET);
+}
+
 /** Called once at server start. Throws to refuse to boot. */
 export function assertBootConfig() {
   if (isProduction() && process.env.PATS_DEMO_AUTH === "true") {
@@ -35,4 +40,9 @@ export function assertBootConfig() {
   }
   sessionSecret();
   if (!process.env.DATABASE_URL) throw new ConfigError("DATABASE_URL is required.");
+  if (entraConfigured()) {
+    const k = process.env.TOKEN_ENCRYPTION_KEY;
+    if (!k || Buffer.from(k, "base64").length !== 32) throw new ConfigError("TOKEN_ENCRYPTION_KEY (32 bytes, base64) is required when Entra ID sign-in is configured.");
+    if (isProduction() && !process.env.APP_URL?.startsWith("https://")) throw new ConfigError("APP_URL must be the https:// address registered as the Entra redirect URI.");
+  }
 }

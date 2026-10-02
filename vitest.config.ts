@@ -15,7 +15,7 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     globalSetup: ["tests/global-setup.ts"],
     setupFiles: ["tests/setup.ts"],
-    env: { DATABASE_URL: TEST_DATABASE_URL, TEST_DATABASE_URL, SESSION_SECRET: "test-secret-at-least-32-characters-long", NODE_ENV: "test" },
+    env: { DATABASE_URL: TEST_DATABASE_URL, TEST_DATABASE_URL, SESSION_SECRET: "test-secret-at-least-32-characters-long", NODE_ENV: "test", FILE_STORE_DIR: ".storage-test" },
     // Tests share one real Postgres database, so files run one at a time.
     fileParallelism: false,
     testTimeout: 20_000,

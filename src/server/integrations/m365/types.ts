@@ -11,11 +11,38 @@ export interface SendMailInput {
   subject: string;
   body: string;
   cc?: string[];
+  attachments?: MailAttachment[];
+}
+
+export interface MailAttachment {
+  name: string;
+  contentType: string;
+  bytes: Buffer;
 }
 
 export interface SendMailResult {
   messageId: string;
   threadId: string;
+}
+
+/** An inbound message as PATS reads it. Body is plain text. */
+export interface MailMessage {
+  id: string;
+  internetMessageId: string;
+  conversationId: string;
+  from: string;
+  to: string[];
+  subject: string;
+  bodyText: string;
+  receivedAt: Date;
+}
+
+export interface MailSubscriptionInput {
+  mailbox: string;
+  notificationUrl: string;
+  lifecycleNotificationUrl?: string;
+  clientState: string;
+  expiresAt: Date;
 }
 
 export interface BusyBlock {
@@ -54,6 +81,16 @@ export interface M365Client {
   mode: IntegrationMode;
   mail: {
     send(input: SendMailInput): Promise<SendMailResult>;
+    /** One message from a mailbox PATS syncs (null if it's gone). */
+    getMessage(mailbox: string, id: string): Promise<MailMessage | null>;
+    /** New Inbox messages since the last delta link (first call: since `since`). */
+    delta(mailbox: string, deltaLink: string | null, since: Date): Promise<{ messages: MailMessage[]; deltaLink: string }>;
+  };
+  subscriptions: {
+    /** Change notifications for new Inbox messages. */
+    createMail(input: MailSubscriptionInput): Promise<{ id: string; expiresAt: Date }>;
+    renew(mailbox: string, id: string, expiresAt: Date): Promise<{ expiresAt: Date }>;
+    remove(mailbox: string, id: string): Promise<void>;
   };
   calendar: {
     getSchedule(emails: string[], start: Date, end: Date): Promise<Record<string, BusyBlock[]>>;
