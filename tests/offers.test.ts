@@ -6,12 +6,13 @@ import * as approvals from "@/server/services/approvals";
 import { decideApproval } from "@/server/services/approval-decisions";
 import * as jobs from "@/server/services/jobs";
 import * as offers from "@/server/services/offers";
-import { makeApplication, makeCandidate, makeJob, makeUser, resetDb } from "./fixtures";
+import { installDefaultLetterTemplates, makeApplication, makeCandidate, makeJob, makeUser, resetDb } from "./fixtures";
 
 const BASE_TERMS = { baseSalary: 120_000, bonusPercent: 10, signOnBonus: null, equity: null, startDate: "2027-01-04", openingId: null, notes: null };
 const terms = (o: Partial<Parameters<typeof offers.createOffer>[1]> & { applicationId: string }) => offers.createOfferSchema.parse({ ...BASE_TERMS, ...o });
 
 async function world({ chain = true } = {}) {
+  await installDefaultLetterTemplates();
   const admin = userActor(await makeUser("admin"));
   const rec = userActor(await makeUser("recruiter"));
   const hm = userActor(await makeUser("hiring_manager"));

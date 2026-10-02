@@ -65,3 +65,14 @@ export async function makeApplication(candidateId: string, job: { job: { id: str
   const [a] = await db.insert(s.applications).values({ candidateId, jobId: job.job.id, stageId: job.stages[0].id }).returning();
   return a;
 }
+
+/** Installs the default EN and FR-CA offer letter templates (all brands). */
+export async function installDefaultLetterTemplates() {
+  const { buildDefaultLetterTemplate } = await import("@/db/letter-templates");
+  const { uploadTemplate } = await import("@/server/services/offer-letters");
+  const { userActor } = await import("@/server/policy");
+  const admin = userActor(await makeUser("admin", "Template Admin"));
+  for (const locale of ["en", "fr-CA"] as const) {
+    await uploadTemplate(admin, { name: `Default ${locale}`, brandId: null, locale, fileName: `${locale}.docx`, bytes: await buildDefaultLetterTemplate(locale) });
+  }
+}

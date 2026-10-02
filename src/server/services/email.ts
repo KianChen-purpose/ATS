@@ -19,9 +19,10 @@ export async function sendAndLogEmail(
     body: string;
     timeline?: boolean;
     auditAction?: string;
+    attachments?: { fileId: string; name: string; contentType: string; bytes: Buffer }[];
   },
 ) {
-  const sent = await m365().mail.send({ from: opts.from, to: opts.to, subject: opts.subject, body: opts.body });
+  const sent = await m365().mail.send({ from: opts.from, to: opts.to, subject: opts.subject, body: opts.body, attachments: opts.attachments });
   await db.transaction(async (tx) => {
     const [email] = await tx
       .insert(s.emails)
@@ -33,6 +34,7 @@ export async function sendAndLogEmail(
         toAddress: opts.to,
         subject: opts.subject,
         body: opts.body,
+        attachments: (opts.attachments ?? []).map((a) => ({ fileId: a.fileId, name: a.name })),
         sentById: actorUserId(actor),
         externalMessageId: sent.messageId,
         externalThreadId: sent.threadId,

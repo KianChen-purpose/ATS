@@ -50,10 +50,11 @@ export async function requireUser() {
 
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 
-/** The signed-in user as a policy actor, for passing to services. Redirects to /login if signed out. */
-export const requireActor = cache(async () => {
+/** The signed-in user as a policy actor with request context, or null when signed out. */
+export const getActor = cache(async () => {
+  const user = await getCurrentUser();
+  if (!user) return null;
   const { userActor } = await import("@/server/policy/actor");
-  const user = await requireUser();
   const h = await headers();
   return userActor(user, {
     requestId: h.get("x-request-id") ?? h.get("x-ms-request-id") ?? crypto.randomUUID(),
@@ -61,3 +62,10 @@ export const requireActor = cache(async () => {
     userAgent: h.get("user-agent")?.slice(0, 500) ?? null,
   });
 });
+
+/** The signed-in user as a policy actor, for passing to services. Redirects to /login if signed out. */
+export async function requireActor() {
+  const actor = await getActor();
+  if (!actor) redirect("/login");
+  return actor;
+}

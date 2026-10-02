@@ -27,6 +27,7 @@ export const mockM365: M365Client = {
         mode: "mock",
         recipients: [input.to, ...(input.cc ?? [])],
         ids: res,
+        counts: input.attachments?.length ? { attachments: input.attachments.length } : undefined,
       });
       return res;
     },

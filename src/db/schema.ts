@@ -108,6 +108,7 @@ export const offerStatus = pgEnum("offer_status", [
   "declined",
   "withdrawn",
 ]);
+export const fileKind = pgEnum("file_kind", ["offer_letter", "offer_letter_template", "resume"]);
 export const approvalSubject = pgEnum("approval_subject", ["job", "offer"]);
 export const approvalRequestStatus = pgEnum("approval_request_status", ["pending", "approved", "rejected", "cancelled"]);
 export const approvalStepStatus = pgEnum("approval_step_status", ["pending", "approved", "rejected", "skipped"]);
@@ -468,6 +469,8 @@ export const offers = pgTable("offers", {
   sentAt: timestamp("sent_at", { withTimezone: true }),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
   declineReason: text("decline_reason"),
+  /** The letter most recently generated for this offer. */
+  letterFileId: uuid("letter_file_id").references((): AnyPgColumn => files.id),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -503,6 +506,8 @@ export const emails = pgTable(
     toAddress: text("to_address").notNull(),
     subject: text("subject").notNull(),
     body: text("body").notNull(),
+    /** Files sent with the email (metadata only; bytes are in the FileStore). */
+    attachments: jsonb("attachments").$type<{ fileId: string; name: string }[]>().notNull().default([]),
     sentById: uuid("sent_by_id").references(() => users.id),
     /** Graph conversationId / internetMessageId for thread sync. */
     externalThreadId: text("external_thread_id"),
@@ -634,6 +639,49 @@ export const approvalSteps = pgTable(
   },
   (t) => [uniqueIndex("approval_steps_pos_uq").on(t.requestId, t.position), index("approval_steps_approver_idx").on(t.approverId, t.status)],
 );
+
+// ---------------------------------------------------------------------------
+// Files (ARCHITECTURE.md D9): bytes live in the FileStore; the database keeps metadata only
+// ---------------------------------------------------------------------------
+
+export const files = pgTable(
+  "files",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    kind: fileKind("kind").notNull(),
+    /** Key in the FileStore (local disk in dev; Azure Blob / SharePoint in Azure). */
+    storageKey: text("storage_key").notNull().unique(),
+    fileName: text("file_name").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    /** Visibility context (ARCHITECTURE.md §3.7): job-tied files follow the job. */
+    jobId: uuid("job_id").references(() => jobs.id),
+    applicationId: uuid("application_id").references(() => applications.id),
+    candidateId: uuid("candidate_id").references(() => candidates.id),
+    brandId: uuid("brand_id").references(() => brands.id),
+    createdById: uuid("created_by_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Set when the bytes were removed (anonymization or retention). The row stays for history. */
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("files_candidate_idx").on(t.candidateId), index("files_application_idx").on(t.applicationId)],
+);
+
+/** Word offer letter templates with merge fields, scoped by brand and language. */
+export const offerLetterTemplates = pgTable("offer_letter_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  /** Null = available to every brand. */
+  brandId: uuid("brand_id").references(() => brands.id),
+  locale: locale("locale").notNull().default("en"),
+  fileId: uuid("file_id")
+    .notNull()
+    .references(() => files.id),
+  active: boolean("active").notNull().default(true),
+  createdById: uuid("created_by_id").references(() => users.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ---------------------------------------------------------------------------
 // Localization
@@ -805,6 +853,7 @@ export const scorecardsRelations = relations(scorecards, ({ one }) => ({
 
 export const offersRelations = relations(offers, ({ one }) => ({
   application: one(applications, { fields: [offers.applicationId], references: [applications.id] }),
+  letter: one(files, { fields: [offers.letterFileId], references: [files.id] }),
   opening: one(openings, { fields: [offers.openingId], references: [openings.id] }),
   createdBy: one(users, { fields: [offers.createdById], references: [users.id] }),
 }));
@@ -842,4 +891,9 @@ export const schedulingLinksRelations = relations(schedulingLinks, ({ one }) => 
   application: one(applications, { fields: [schedulingLinks.applicationId], references: [applications.id] }),
   stage: one(jobStages, { fields: [schedulingLinks.stageId], references: [jobStages.id] }),
   createdBy: one(users, { fields: [schedulingLinks.createdById], references: [users.id] }),
+}));
+
+export const offerLetterTemplatesRelations = relations(offerLetterTemplates, ({ one }) => ({
+  brand: one(brands, { fields: [offerLetterTemplates.brandId], references: [brands.id] }),
+  file: one(files, { fields: [offerLetterTemplates.fileId], references: [files.id] }),
 }));

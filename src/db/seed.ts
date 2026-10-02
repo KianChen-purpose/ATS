@@ -17,6 +17,8 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "offer_letter_templates",
+    "files",
     "approval_steps",
     "approval_requests",
     "approval_chain_steps",
@@ -51,6 +53,10 @@ async function reset() {
     "brands",
   ];
   await db.execute(sql.raw(`TRUNCATE ${tables.join(", ")} CASCADE`));
+  // Local FileStore holds only demo files; start it fresh too.
+  const { rm } = await import("node:fs/promises");
+  const path = await import("node:path");
+  await rm(path.resolve(process.env.FILE_STORE_DIR ?? ".storage"), { recursive: true, force: true });
 }
 
 const BRANDS = [
@@ -281,6 +287,32 @@ async function main() {
     { approverType: "user", approverId: cpo },
     { approverType: "user", approverId: cfo },
   ]);
+
+  console.log("Creating offer letter templates…");
+  {
+    const { createHash, randomUUID } = await import("node:crypto");
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    const { buildDefaultLetterTemplate } = await import("./letter-templates");
+    const root = path.resolve(process.env.FILE_STORE_DIR ?? ".storage");
+    for (const [locale, name] of [["en", "Standard offer letter"], ["fr-CA", "Lettre d'offre standard"]] as const) {
+      const bytes = await buildDefaultLetterTemplate(locale);
+      const id = randomUUID();
+      const storageKey = `offer_letter_template/${id.slice(0, 2)}/${id}`;
+      await mkdir(path.dirname(path.join(root, storageKey)), { recursive: true });
+      await writeFile(path.join(root, storageKey), bytes);
+      await db.insert(s.files).values({
+        id,
+        kind: "offer_letter_template",
+        storageKey,
+        fileName: `${name}.docx`,
+        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        sizeBytes: bytes.length,
+        sha256: createHash("sha256").update(bytes).digest("hex"),
+      });
+      await db.insert(s.offerLetterTemplates).values({ name, locale, fileId: id });
+    }
+  }
 
   console.log("Creating jobs…");
   let openingSeq = 1000;

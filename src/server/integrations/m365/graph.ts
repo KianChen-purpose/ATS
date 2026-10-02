@@ -78,6 +78,13 @@ export const graphM365: M365Client = {
             body: { contentType: "Text", content: input.body },
             toRecipients: [{ emailAddress: { address: input.to } }],
             ccRecipients: (input.cc ?? []).map((address) => ({ emailAddress: { address } })),
+            // Inline file attachments (up to 3 MB each); larger files need an upload session.
+            attachments: (input.attachments ?? []).map((a) => ({
+              "@odata.type": "#microsoft.graph.fileAttachment",
+              name: a.name,
+              contentType: a.contentType,
+              contentBytes: a.bytes.toString("base64"),
+            })),
           }),
         });
         await graph(`/users/${encodeURIComponent(input.from)}/messages/${draft.id}/send`, { method: "POST" });

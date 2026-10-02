@@ -11,6 +11,13 @@ export interface SendMailInput {
   subject: string;
   body: string;
   cc?: string[];
+  attachments?: MailAttachment[];
+}
+
+export interface MailAttachment {
+  name: string;
+  contentType: string;
+  bytes: Buffer;
 }
 
 export interface SendMailResult {

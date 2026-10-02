@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db, schema as s } from "@/db";
 import { actorUserId, canAdministerPrivacy, ForbiddenError, NotFoundError, type Actor } from "@/server/policy";
 import { recordAudit } from "./audit";
+import { markCandidateFilesDeleted, removeStoredFiles } from "./files";
 
 /**
  * Privacy & compliance services (ARCHITECTURE.md §5): consent, data subject requests and
@@ -105,6 +106,7 @@ export async function anonymizeCandidate(actor: Actor, candidateId: string, opts
   const appIds = candidate.applications.map((a) => a.id);
   const now = new Date();
 
+  let removedKeys: string[] = [];
   await db.transaction(async (tx) => {
     for (const app of active) {
       await tx.update(s.applications).set({ status: "archived", archivedAt: now }).where(eq(s.applications.id, app.id));
@@ -151,13 +153,21 @@ export async function anonymizeCandidate(actor: Actor, candidateId: string, opts
         .set({ title: sql`split_part(${s.interviews.title}, ' – ', 1)` })
         .where(inArray(s.interviews.applicationId, appIds));
     }
+    // Generated letters and other files about the person: rows stay, bytes go after commit.
+    removedKeys = await markCandidateFilesDeleted(tx, candidateId);
     if (opts.dsrId) {
       await tx
         .update(s.dataSubjectRequests)
         .set({ status: "completed", completedAt: now, candidateId })
         .where(eq(s.dataSubjectRequests.id, opts.dsrId));
     }
-    await recordAudit(tx, actor, "candidate.anonymized", "candidate", candidateId, { reason: opts.reason, dsrId: opts.dsrId ?? null, archivedApplications: active.length });
+    await recordAudit(tx, actor, "candidate.anonymized", "candidate", candidateId, {
+      reason: opts.reason,
+      dsrId: opts.dsrId ?? null,
+      archivedApplications: active.length,
+      filesRemoved: removedKeys.length,
+    });
   });
+  await removeStoredFiles(removedKeys);
   return { alreadyAnonymized: false as const };
 }
