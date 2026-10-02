@@ -50,6 +50,13 @@
       "when": 1790904179818,
       "tag": "0006_generic_approval_chains",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790904657677,
+      "tag": "0007_job_pending_approval_status",
+      "breakpoints": true
     }
   ]
 }

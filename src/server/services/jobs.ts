@@ -13,7 +13,9 @@ import {
   type Actor,
   visibleJobsFilter,
 } from "@/server/policy";
+import { cancelPendingApprovals, latestApproval, notifyApprover, startApproval } from "./approvals";
 import { recordAudit } from "./audit";
+import type { Tx } from "./tx";
 
 // ---------------------------------------------------------------------------
 // Reads
@@ -90,6 +92,12 @@ export async function getJobDetail(actor: UserActor, jobId: string) {
   });
   if (!job || !canViewJobRow(actor, job, job.team.map((t) => t.userId))) return null;
   return canViewCompensation(actor) ? job : { ...job, compMin: null, compMax: null };
+}
+
+/** The job's latest approval run, for the job page (visibility checked). */
+export async function getJobApproval(actor: UserActor, jobId: string) {
+  await assertCanSeeJobs(actor, [jobId]);
+  return latestApproval("job", jobId);
 }
 
 export type PipelineApp = Awaited<ReturnType<typeof getPipeline>>[number];
@@ -183,9 +191,25 @@ export const createJobSchema = z.object({
   status: z.enum(["draft", "open"]),
 });
 
+/**
+ * Opening a job that has never been open goes through the job approval chain, if one applies
+ * (ARCHITECTURE.md §7.4). Returns the status the job should take and who to notify.
+ */
+async function requestOpen(tx: Tx, actor: Actor, job: typeof s.jobs.$inferSelect) {
+  const started = await startApproval(tx, actor, "job", job.id, {
+    job: { id: job.id, brandId: job.brandId, departmentId: job.departmentId, hiringManagerId: job.hiringManagerId, recruiterId: job.recruiterId },
+  });
+  return started ? { status: "pending_approval" as const, notify: started.firstApproverId } : { status: "open" as const, notify: null };
+}
+
+/** Values for a job that is (re)opening now. */
+function openValues(job: { openedAt: Date | null; confidential: boolean }, firstOpen: boolean) {
+  return { status: "open" as const, openedAt: job.openedAt ?? new Date(), closedAt: null, publishedOnCareerSite: firstOpen ? !job.confidential : undefined };
+}
+
 export async function createJob(actor: Actor, d: z.output<typeof createJobSchema>) {
   const user = requireRecruiting(actor, "You don't have permission to create jobs.");
-  return db.transaction(async (tx) => {
+  const { jobId, notify } = await db.transaction(async (tx) => {
     const [job] = await tx
       .insert(s.jobs)
       .values({
@@ -202,38 +226,111 @@ export async function createJob(actor: Actor, d: z.output<typeof createJobSchema
         coordinatorId: d.coordinatorId,
         description: d.description || null,
         confidential: d.confidential,
-        status: d.status,
-        openedAt: d.status === "open" ? new Date() : null,
-        publishedOnCareerSite: d.status === "open" && !d.confidential,
+        status: "draft",
       })
       .returning();
     await tx.insert(s.jobStages).values(DEFAULT_STAGES.map((st, i) => ({ ...st, jobId: job.id, position: i })));
     const [{ next }] = await tx.select({ next: sql<number>`coalesce(max(substring(code from 5)::int), 999) + 1` }).from(s.openings);
     await tx.insert(s.openings).values(Array.from({ length: d.openings }, (_, i) => ({ jobId: job.id, code: `REQ-${next + i}` })));
     await recordAudit(tx, actor, "job.created", "job", job.id, { title: d.title });
-    return job.id;
+    let notify: string | null = null;
+    if (d.status === "open") {
+      const r = await requestOpen(tx, actor, job);
+      notify = r.notify;
+      await tx.update(s.jobs).set(r.status === "open" ? openValues(job, true) : { status: r.status }).where(eq(s.jobs.id, job.id));
+      await recordAudit(tx, actor, "job.status_changed", "job", job.id, { from: "draft", to: r.status });
+    }
+    return { jobId: job.id, notify };
   });
+  if (notify) await notifyApprover(notify, "Job approval needed", `${d.title} is waiting for your approval.`, `/jobs/${jobId}`);
+  return jobId;
 }
 
-export const jobStatusSchema = z.enum(s.jobStatus.enumValues);
+/** Statuses a person can pick. "pending_approval" is only ever set by the approval flow. */
+export const jobStatusSchema = z.enum(["draft", "open", "on_hold", "closed"]);
 
 export async function setJobStatus(actor: Actor, jobId: string, status: z.output<typeof jobStatusSchema>) {
   requireRecruiting(actor, "You don't have permission to change job status.");
   await assertCanSeeJobs(actor, [jobId]);
   const job = await db.query.jobs.findFirst({ where: eq(s.jobs.id, jobId) });
   if (!job) throw new NotFoundError("Job");
-  await db.transaction(async (tx) => {
-    await tx
-      .update(s.jobs)
-      .set({
-        status,
-        openedAt: status === "open" && !job.openedAt ? new Date() : job.openedAt,
-        closedAt: status === "closed" ? new Date() : null,
-        publishedOnCareerSite: status === "open" ? !job.confidential && job.publishedOnCareerSite : false,
-      })
-      .where(eq(s.jobs.id, jobId));
-    await recordAudit(tx, actor, "job.status_changed", "job", jobId, { from: job.status, to: status });
+  if (job.status === status) return { status };
+  if (job.status === "pending_approval" && status !== "draft") throw new Error("This job is waiting for approval. Withdraw it to draft to make changes.");
+
+  const { to, notify } = await db.transaction(async (tx) => {
+    let to: (typeof s.jobStatus.enumValues)[number] = status;
+    let notify: string | null = null;
+    if (job.status === "pending_approval") {
+      await cancelPendingApprovals(tx, actor, "job", job.id);
+      await tx.update(s.jobs).set({ status: "draft" }).where(eq(s.jobs.id, jobId));
+    } else if (status === "open" && !job.openedAt) {
+      // First time opening: needs approval if a chain applies.
+      const r = await requestOpen(tx, actor, job);
+      to = r.status;
+      notify = r.notify;
+      await tx.update(s.jobs).set(r.status === "open" ? openValues(job, true) : { status: r.status }).where(eq(s.jobs.id, jobId));
+    } else {
+      await tx
+        .update(s.jobs)
+        .set(
+          status === "open"
+            ? openValues(job, false)
+            : { status, closedAt: status === "closed" ? new Date() : null, publishedOnCareerSite: false },
+        )
+        .where(eq(s.jobs.id, jobId));
+    }
+    await recordAudit(tx, actor, "job.status_changed", "job", jobId, { from: job.status, to });
+    return { to, notify };
   });
+  if (notify) await notifyApprover(notify, "Job approval needed", `${job.title} is waiting for your approval.`, `/jobs/${jobId}`);
+  return { status: to };
+}
+
+/** Apply a finished job approval (called by the approval flow inside its transaction). */
+export async function applyJobApprovalOutcome(tx: Tx, actor: Actor, jobId: string, outcome: "approved" | "rejected") {
+  const job = await tx.query.jobs.findFirst({ where: eq(s.jobs.id, jobId) });
+  if (!job || job.status !== "pending_approval") return job ?? null;
+  await tx.update(s.jobs).set(outcome === "approved" ? openValues(job, true) : { status: "draft" }).where(eq(s.jobs.id, jobId));
+  await recordAudit(tx, actor, "job.status_changed", "job", jobId, { from: "pending_approval", to: outcome === "approved" ? "open" : "draft", via: "approval" });
+  return job;
+}
+
+// ---------------------------------------------------------------------------
+// Openings (requisitions)
+// ---------------------------------------------------------------------------
+
+export const addOpeningsSchema = z.object({
+  jobId: z.string().uuid(),
+  count: z.number().int().min(1).max(50),
+  reason: z.enum(s.openingReason.enumValues),
+  targetStartDate: z.string().date().nullable(),
+});
+
+export async function addOpenings(actor: Actor, d: z.output<typeof addOpeningsSchema>) {
+  requireRecruiting(actor, "You don't have permission to change openings.");
+  await assertCanSeeJobs(actor, [d.jobId]);
+  return db.transaction(async (tx) => {
+    const [{ next }] = await tx.select({ next: sql<number>`coalesce(max(substring(code from 5)::int), 999) + 1` }).from(s.openings);
+    const rows = await tx
+      .insert(s.openings)
+      .values(Array.from({ length: d.count }, (_, i) => ({ jobId: d.jobId, code: `REQ-${next + i}`, reason: d.reason, targetStartDate: d.targetStartDate })))
+      .returning();
+    for (const o of rows) await recordAudit(tx, actor, "opening.created", "opening", o.id, { jobId: d.jobId, code: o.code, reason: d.reason });
+    return rows;
+  });
+}
+
+export async function closeOpening(actor: Actor, openingId: string) {
+  requireRecruiting(actor, "You don't have permission to change openings.");
+  const opening = await db.query.openings.findFirst({ where: eq(s.openings.id, openingId) });
+  if (!opening) throw new NotFoundError("Opening");
+  await assertCanSeeJobs(actor, [opening.jobId]);
+  if (opening.status !== "open") throw new Error("Only open openings can be closed.");
+  await db.transaction(async (tx) => {
+    await tx.update(s.openings).set({ status: "closed" }).where(eq(s.openings.id, openingId));
+    await recordAudit(tx, actor, "opening.closed", "opening", openingId, { jobId: opening.jobId });
+  });
+  return opening;
 }
 
 export async function setCareerSitePublished(actor: Actor, jobId: string, published: boolean) {

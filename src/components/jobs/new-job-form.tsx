@@ -80,7 +80,7 @@ export function NewJobForm({ brands, departments, locations, users }: { brands: 
           <Field label="Status">
             <select name="status" className={inputClass}>
               <option value="draft">Draft</option>
-              <option value="open">Open (publish to career site)</option>
+              <option value="open">Open (sends for approval if a chain applies)</option>
             </select>
           </Field>
           <label className="flex items-center gap-2 self-end pb-2">

@@ -60,6 +60,7 @@ export default async function JobsPage(props: PageProps<"/jobs">) {
           tabs={[
             { key: "open", label: "Open", count: counts.open ?? 0 },
             { key: "on_hold", label: "On hold", count: counts.on_hold ?? 0 },
+            { key: "pending_approval", label: "Pending approval", count: counts.pending_approval ?? 0 },
             { key: "draft", label: "Draft", count: counts.draft ?? 0 },
             { key: "closed", label: "Closed", count: counts.closed ?? 0 },
             { key: "all", label: "All", count: total },

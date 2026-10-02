@@ -38,7 +38,7 @@ export const userRole = pgEnum("user_role", [
   "executive",
 ]);
 
-export const jobStatus = pgEnum("job_status", ["draft", "open", "on_hold", "closed"]);
+export const jobStatus = pgEnum("job_status", ["draft", "pending_approval", "open", "on_hold", "closed"]);
 export const employmentType = pgEnum("employment_type", [
   "full_time",
   "part_time",
