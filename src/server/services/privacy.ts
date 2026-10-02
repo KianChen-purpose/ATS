@@ -129,6 +129,7 @@ export async function anonymizeCandidate(actor: Actor, candidateId: string, opts
         tags: [],
         resumeText: null,
         resumeFileName: null,
+        resumeFileId: null,
         timezone: null,
         anonymizedAt: now,
         updatedAt: now,
@@ -147,6 +148,7 @@ export async function anonymizeCandidate(actor: Actor, candidateId: string, opts
     if (appIds.length) {
       await tx.update(s.scorecards).set({ notes: null }).where(inArray(s.scorecards.applicationId, appIds));
       await tx.update(s.offers).set({ notes: null }).where(inArray(s.offers.applicationId, appIds));
+      await tx.update(s.applicationAnswers).set({ value: null }).where(inArray(s.applicationAnswers.applicationId, appIds));
       // Interview titles are "Stage – Candidate Name": keep the stage.
       await tx
         .update(s.interviews)

@@ -43,6 +43,7 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
           },
           scorecards: { orderBy: desc(s.scorecards.submittedAt), with: { author: true, interview: true } },
           offers: { orderBy: desc(s.offers.createdAt) },
+          answers: { with: { question: true } },
         },
       },
       activities: { orderBy: desc(s.activities.createdAt), with: { actor: true } },

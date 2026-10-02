@@ -69,6 +69,11 @@ export async function downloadFile(actor: Actor, fileId: string) {
   if (!file || file.deletedAt) throw new NotFoundError("File");
   if (file.kind === "offer_letter_template") {
     if (!canManageRecruiting(user)) throw new ForbiddenError();
+  } else if (file.kind === "resume") {
+    // One resume serves every application: it follows the candidate's visibility (§3.3).
+    if (!file.candidateId) throw new NotFoundError("File");
+    const { assertCanSeeCandidate } = await import("./candidates");
+    await assertCanSeeCandidate(user, file.candidateId);
   } else {
     if (!file.jobId) throw new NotFoundError("File");
     await assertCanSeeJobs(actor, [file.jobId]);

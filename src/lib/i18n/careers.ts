@@ -29,6 +29,36 @@ const en = {
   partOf: "Part of Purpose Unlimited",
   notFound: "This role is no longer open.",
   privacy: "We use your information only to consider you for roles, as described in our privacy notice.",
+  form: {
+    title: (job: string) => `Apply: ${job}`,
+    required: "required",
+    firstName: "First name",
+    lastName: "Last name",
+    email: "Email",
+    phone: "Phone",
+    location: "City, province",
+    linkedin: "LinkedIn profile URL",
+    resume: "Resume (PDF or Word, up to 5 MB)",
+    questions: "A few questions",
+    yes: "Yes",
+    no: "No",
+    choose: "Choose…",
+    consentProcessing: (brand: string) =>
+      `I agree that ${brand}, part of Purpose Unlimited, may collect and use my information to consider me for this role, and keep it in Canada for as long as its privacy notice describes.`,
+    consentTalentPool: "Also keep me in mind for future roles (for up to two years). You can withdraw this at any time.",
+    submit: "Submit application",
+    submitting: "Submitting…",
+    doneTitle: "Thank you for applying",
+    doneBody: (job: string, brand: string) => `We've received your application for ${job}. ${brand}'s team will review it and be in touch if there's a match. A confirmation is on its way to your inbox.`,
+    errors: {
+      rate_limited: "Too many attempts. Please wait a few minutes and try again.",
+      consent_required: "Please agree to how we'll use your information so we can consider your application.",
+      invalid: "Please check the highlighted field.",
+      resume: "Please upload your resume as a PDF or Word (.docx) file under 5 MB.",
+      answers: "Please answer the required question.",
+      job_closed: "This role is no longer accepting applications.",
+    },
+  },
 };
 
 const fr: typeof en = {
@@ -52,6 +82,36 @@ const fr: typeof en = {
   partOf: "Membre de Purpose Unlimited",
   notFound: "Ce poste n'est plus ouvert.",
   privacy: "Nous utilisons vos renseignements uniquement pour évaluer votre candidature, comme le décrit notre avis de confidentialité.",
+  form: {
+    title: (job: string) => `Postuler : ${job}`,
+    required: "obligatoire",
+    firstName: "Prénom",
+    lastName: "Nom",
+    email: "Courriel",
+    phone: "Téléphone",
+    location: "Ville, province",
+    linkedin: "URL de votre profil LinkedIn",
+    resume: "CV (PDF ou Word, 5 Mo maximum)",
+    questions: "Quelques questions",
+    yes: "Oui",
+    no: "Non",
+    choose: "Choisir…",
+    consentProcessing: (brand: string) =>
+      `J'accepte que ${brand}, membre de Purpose Unlimited, recueille et utilise mes renseignements pour évaluer ma candidature à ce poste, et les conserve au Canada pendant la durée prévue par son avis de confidentialité.`,
+    consentTalentPool: "Pensez aussi à moi pour de futurs postes (pendant deux ans au maximum). Je peux retirer ce consentement en tout temps.",
+    submit: "Envoyer ma candidature",
+    submitting: "Envoi en cours…",
+    doneTitle: "Merci d'avoir postulé",
+    doneBody: (job: string, brand: string) => `Nous avons bien reçu votre candidature au poste de ${job}. L'équipe de ${brand} l'examinera et communiquera avec vous si votre profil correspond. Une confirmation vous a été envoyée par courriel.`,
+    errors: {
+      rate_limited: "Trop de tentatives. Veuillez patienter quelques minutes, puis réessayer.",
+      consent_required: "Veuillez accepter l'utilisation de vos renseignements afin que nous puissions évaluer votre candidature.",
+      invalid: "Veuillez vérifier le champ indiqué.",
+      resume: "Veuillez téléverser votre CV en format PDF ou Word (.docx) de moins de 5 Mo.",
+      answers: "Veuillez répondre à la question obligatoire.",
+      job_closed: "Ce poste n'accepte plus de candidatures.",
+    },
+  },
 };
 
 export function t(locale: CareerLocale) {

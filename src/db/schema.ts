@@ -108,6 +108,7 @@ export const offerStatus = pgEnum("offer_status", [
   "declined",
   "withdrawn",
 ]);
+export const questionKind = pgEnum("question_kind", ["short_text", "long_text", "yes_no", "single_select"]);
 export const fileKind = pgEnum("file_kind", ["offer_letter", "offer_letter_template", "resume"]);
 export const approvalSubject = pgEnum("approval_subject", ["job", "offer"]);
 export const approvalRequestStatus = pgEnum("approval_request_status", ["pending", "approved", "rejected", "cancelled"]);
@@ -261,7 +262,9 @@ export const candidates = pgTable(
     ownerId: uuid("owner_id").references(() => users.id),
     /** Language for candidate-facing email and pages (ARCHITECTURE.md §7.2). */
     preferredLocale: locale("preferred_locale").notNull().default("en"),
-    /** IANA time zone for candidate-facing times; null = brand default (America/Toronto). */
+    /** The candidate's current resume file (FileStore). */
+  resumeFileId: uuid("resume_file_id").references((): AnyPgColumn => files.id),
+  /** IANA time zone for candidate-facing times; null = brand default (America/Toronto). */
     timezone: text("timezone"),
     /** Set when personal data was wiped (deletion request or retention). Row and history stay. */
     anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
@@ -641,6 +644,52 @@ export const approvalSteps = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Application forms (PRD §4.7): configurable questions per job, in EN and FR-CA
+// ---------------------------------------------------------------------------
+
+export const applicationQuestions = pgTable(
+  "application_questions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    kind: questionKind("kind").notNull(),
+    labelEn: text("label_en").notNull(),
+    labelFr: text("label_fr").notNull(),
+    /** single_select choices: stable value plus EN/FR labels. */
+    options: jsonb("options").$type<{ value: string; en: string; fr: string }[]>().notNull().default([]),
+    required: boolean("required").notNull().default(false),
+    /**
+     * Knockout: answers that pass ("yes"/"no" or option values). Any other answer archives the
+     * application with the "Knockout question" reason. Null = not a knockout question.
+     */
+    passAnswers: text("pass_answers").array(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("application_questions_job_idx").on(t.jobId, t.position)],
+);
+
+export const applicationAnswers = pgTable(
+  "application_answers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "restrict" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => applicationQuestions.id, { onDelete: "restrict" }),
+    value: text("value"),
+    knockedOut: boolean("knocked_out").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("application_answers_uq").on(t.applicationId, t.questionId)],
+);
+
+// ---------------------------------------------------------------------------
 // Files (ARCHITECTURE.md D9): bytes live in the FileStore; the database keeps metadata only
 // ---------------------------------------------------------------------------
 
@@ -820,6 +869,7 @@ export const applicationsRelations = relations(applications, ({ one, many }) => 
   scorecards: many(scorecards),
   offers: many(offers),
   stageEvents: many(applicationStageEvents),
+  answers: many(applicationAnswers),
 }));
 
 export const applicationStageEventsRelations = relations(applicationStageEvents, ({ one }) => ({
@@ -896,4 +946,13 @@ export const schedulingLinksRelations = relations(schedulingLinks, ({ one }) => 
 export const offerLetterTemplatesRelations = relations(offerLetterTemplates, ({ one }) => ({
   brand: one(brands, { fields: [offerLetterTemplates.brandId], references: [brands.id] }),
   file: one(files, { fields: [offerLetterTemplates.fileId], references: [files.id] }),
+}));
+
+export const applicationQuestionsRelations = relations(applicationQuestions, ({ one }) => ({
+  job: one(jobs, { fields: [applicationQuestions.jobId], references: [jobs.id] }),
+}));
+
+export const applicationAnswersRelations = relations(applicationAnswers, ({ one }) => ({
+  application: one(applications, { fields: [applicationAnswers.applicationId], references: [applications.id] }),
+  question: one(applicationQuestions, { fields: [applicationAnswers.questionId], references: [applicationQuestions.id] }),
 }));

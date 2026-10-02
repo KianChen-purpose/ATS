@@ -12,7 +12,7 @@ export type UserActor = { kind: "user"; id: string; role: Role; name: string; em
  * Work done on nobody's behalf: a candidate using a public link, or a worker job.
  * System actors pass only the specific checks written for them (e.g. a valid scheduling token).
  */
-export type SystemActor = { kind: "system"; name: "self_scheduling" | "worker" | "seed" };
+export type SystemActor = { kind: "system"; name: "self_scheduling" | "career_site" | "worker" | "seed" };
 
 export type Actor = UserActor | SystemActor;
 

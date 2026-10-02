@@ -17,6 +17,8 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "application_answers",
+    "application_questions",
     "offer_letter_templates",
     "files",
     "approval_steps",
@@ -175,6 +177,7 @@ const ARCHIVE_REASONS: { name: string; category: (typeof s.archiveCategory.enumV
   { name: "Candidate withdrew", category: "withdrew" },
   { name: "Accepted another offer", category: "withdrew" },
   { name: "Unresponsive", category: "other" },
+  { name: "Knockout question", category: "rejected" },
 ];
 
 const SKILLS_BY_DEPT: Record<string, string[]> = {
@@ -357,6 +360,30 @@ async function main() {
     await db.insert(s.jobHiringTeam).values(team.map((u) => ({ jobId: job.id, userId: u.id })));
     jobRows.push({ job, stages, dept: j.dept, team });
     if (job.publishedOnCareerSite) {
+      await db.insert(s.applicationQuestions).values([
+        {
+          jobId: job.id,
+          position: 0,
+          kind: "yes_no",
+          labelEn: "Are you legally entitled to work in Canada?",
+          labelFr: "Êtes-vous légalement autorisé(e) à travailler au Canada?",
+          required: true,
+          passAnswers: ["yes"],
+        },
+        {
+          jobId: job.id,
+          position: 1,
+          kind: "single_select",
+          labelEn: "How did you hear about this role?",
+          labelFr: "Comment avez-vous entendu parler de ce poste?",
+          options: [
+            { value: "linkedin", en: "LinkedIn", fr: "LinkedIn" },
+            { value: "referral", en: "Someone who works here", fr: "Une personne qui travaille ici" },
+            { value: "website", en: "Our website", fr: "Notre site Web" },
+            { value: "other", en: "Somewhere else", fr: "Ailleurs" },
+          ],
+        },
+      ]);
       await db.insert(s.jobTranslations).values({
         jobId: job.id,
         locale: "fr-CA",
