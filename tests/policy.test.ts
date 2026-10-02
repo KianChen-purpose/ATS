@@ -161,6 +161,10 @@ describe("field-level and row-level rules", () => {
 
   it("interviewers don't see compensation", async () => {
     expect((await jobs.getJobDetail(w.ivA, w.pub.job.id))?.compMin).toBeNull();
+    const profile = await cands.getCandidateProfile(w.ivA, w.pubCand.id);
+    expect(profile?.applications[0].job.compMin).toBeNull();
+    expect(profile?.applications[0].job.compMax).toBeNull();
+    expect((await cands.getCandidateProfile(w.hmA, w.pubCand.id))?.applications[0].job.compMin).toBe(100_000);
     expect((await jobs.getJobDetail(w.hmA, w.pub.job.id))?.compMin).toBe(100_000);
   });
 

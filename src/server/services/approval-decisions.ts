@@ -4,6 +4,7 @@ import { db } from "@/db";
 import type { Actor } from "@/server/policy";
 import { decisionSchema, notifyApprover, recordDecision } from "./approvals";
 import { applyJobApprovalOutcome } from "./jobs";
+import { applyOfferApprovalOutcome } from "./offers";
 
 /**
  * Decide an approval step and apply the result to its subject in the same transaction.
@@ -18,11 +19,14 @@ export async function decideApproval(actor: Actor, d: z.output<typeof decisionSc
       const job = await applyJobApprovalOutcome(tx, actor, r.request.subjectId, r.outcome);
       title = job?.title ?? "";
     }
+    if (r.request.subject === "offer" && r.outcome !== "pending") {
+      await applyOfferApprovalOutcome(tx, actor, r.request.subjectId, r.outcome);
+    }
     return { ...r, title };
   });
 
   const { request, outcome, nextApproverId } = result;
-  const url = request.subject === "job" ? `/jobs/${request.subjectId}` : `/approvals`;
+  const url = request.subject === "job" ? `/jobs/${request.subjectId}` : `/offers`;
   if (nextApproverId) {
     await notifyApprover(nextApproverId, `${request.subject === "job" ? "Job" : "Offer"} approval needed`, "An approval is waiting for you in PATS.", url);
   } else if (request.requestedById) {

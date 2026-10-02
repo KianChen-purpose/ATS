@@ -31,7 +31,7 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
       applications: {
         orderBy: desc(s.applications.appliedAt),
         with: {
-          job: { with: { brand: true, stages: { orderBy: asc(s.jobStages.position) }, team: true } },
+          job: { with: { brand: true, stages: { orderBy: asc(s.jobStages.position) }, team: true, openings: { orderBy: asc(s.openings.code) } } },
           stage: true,
           source: true,
           archiveReason: true,
@@ -63,9 +63,11 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
     const blind = !canSeeOthersFeedback(actor, submittedOwn);
     return {
       ...a,
+      // Field-level: compensation ranges are restricted (ARCHITECTURE.md §3.5).
+      job: seesComp ? a.job : { ...a.job, compMin: null, compMax: null },
       scorecards: blind ? a.scorecards.filter((sc) => sc.authorId === actor.id) : a.scorecards,
       feedbackHidden: blind ? a.scorecards.length : 0,
-      offers: seesComp ? a.offers.map((o) => ({ ...o, approvals: offerApprovals.get(o.id)?.steps ?? [] })) : [],
+      offers: seesComp ? a.offers.map((o) => ({ ...o, approval: offerApprovals.get(o.id) ?? null, approvals: offerApprovals.get(o.id)?.steps ?? [] })) : [],
     };
   });
 

@@ -106,6 +106,7 @@ export const offerStatus = pgEnum("offer_status", [
   "sent",
   "accepted",
   "declined",
+  "withdrawn",
 ]);
 export const approvalSubject = pgEnum("approval_subject", ["job", "offer"]);
 export const approvalRequestStatus = pgEnum("approval_request_status", ["pending", "approved", "rejected", "cancelled"]);
@@ -452,8 +453,13 @@ export const offers = pgTable("offers", {
     .references(() => applications.id, { onDelete: "restrict" }),
   openingId: uuid("opening_id").references(() => openings.id),
   status: offerStatus("status").notNull().default("draft"),
+  /** Whole dollars (ARCHITECTURE.md §7.6). */
   baseSalary: integer("base_salary").notNull(),
   bonusPercent: integer("bonus_percent"),
+  /** Whole dollars. */
+  signOnBonus: integer("sign_on_bonus"),
+  /** Equity / LTIP terms as written in the letter. */
+  equity: text("equity"),
   currency: text("currency").notNull().default("CAD"),
   startDate: date("start_date"),
   notes: text("notes"),
@@ -461,6 +467,8 @@ export const offers = pgTable("offers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
+  declineReason: text("decline_reason"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
