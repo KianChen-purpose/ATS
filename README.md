@@ -11,6 +11,14 @@ Purpose Unlimited's in-house recruiting platform: Ashby-grade recruiting, built 
 | [CLAUDE.md](CLAUDE.md) | Rules every contributor and Claude session checks each change against |
 | [brand/BRAND.md](brand/BRAND.md) | Brand guidelines; tokens in [brand/tokens.css](brand/tokens.css) |
 
+## Try it in GitHub Codespaces (no setup)
+
+1. On GitHub, open the repository, switch to the branch you want, then **Code → Codespaces → Create codespace on <branch>**.
+2. Wait for setup to finish (first time about 3–5 minutes: installs dependencies, builds the database, loads demo data). PATS then starts by itself and opens on port 3000; if it doesn't, open the **Ports** tab and click the globe icon next to **PATS (3000)**.
+3. Pick any demo user on the sign-in screen. Microsoft 365 runs in mock mode (Settings → Integrations shows what would have been sent). Use **Simulate reply** on a candidate's sent email to demo two-way email.
+
+The forwarded address is private to your GitHub account unless you change the port's visibility. Codespaces run in GitHub's US/EU regions, so use them only with the synthetic demo data, never real candidate data (ARCHITECTURE.md §5.1). To start fresh: `npm run db:reset`. Logs: `/tmp/pats-dev.log`, `/tmp/pats-worker.log`. Stop the Codespace when you're done to save hours.
+
 ## Quick start
 
 Requirements: Node 20+, PostgreSQL 16 (or Docker).

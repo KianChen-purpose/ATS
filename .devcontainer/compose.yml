@@ -1,0 +1,22 @@
+# GitHub Codespaces / VS Code dev container: the app container shares the database's network,
+# so DATABASE_URL and the test database work on localhost exactly as in local development.
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/typescript-node:1-22-bookworm
+    volumes:
+      - ../..:/workspaces:cached
+    command: sleep infinity
+    network_mode: service:db
+    depends_on:
+      - db
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pats
+      POSTGRES_PASSWORD: pats
+      POSTGRES_DB: pats
+    volumes:
+      - pats-devcontainer-db:/var/lib/postgresql/data
+volumes:
+  pats-devcontainer-db:

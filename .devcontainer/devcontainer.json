@@ -1,0 +1,19 @@
+{
+  "name": "PATS demo",
+  "dockerComposeFile": "compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "shutdownAction": "stopCompose",
+  "hostRequirements": { "cpus": 4, "memory": "8gb" },
+  "forwardPorts": [3000],
+  "portsAttributes": {
+    "3000": { "label": "PATS", "onAutoForward": "openPreview" },
+    "5432": { "label": "Postgres", "onAutoForward": "ignore" }
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
+  "customizations": {
+    "codespaces": { "openFiles": ["README.md"] },
+    "vscode": { "extensions": ["dbaeumer.vscode-eslint", "bradlc.vscode-tailwindcss"] }
+  }
+}
