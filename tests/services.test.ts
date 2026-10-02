@@ -100,7 +100,8 @@ describe("job and candidate services", () => {
     );
     expect(await db.query.jobStages.findMany({ where: eq(s.jobStages.jobId, id) })).toHaveLength(8);
     expect(await db.query.openings.findMany({ where: eq(s.openings.jobId, id) })).toHaveLength(2);
-    expect((await auditFor(id)).map((r) => r.action)).toEqual(["job.created"]);
+    // No job chain in this test, so "open" opens immediately.
+    expect((await auditFor(id)).map((r) => r.action).sort()).toEqual(["job.created", "job.status_changed"]);
   });
 
   it("setJobStatus audits the change", async () => {
