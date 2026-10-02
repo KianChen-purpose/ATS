@@ -75,6 +75,16 @@ export function validateDefinition(input: unknown): ReportDefinition {
 export function encodeDefinition(def: ReportDefinitionInput) {
   return Buffer.from(JSON.stringify(def), "utf8").toString("base64url");
 }
+/** Like decodeDefinition, but a bad link is an error instead of the default report (exports). */
+export function decodeDefinitionStrict(q: string): ReportDefinition {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(Buffer.from(q, "base64url").toString("utf8"));
+  } catch {
+    throw new InvalidDefinitionError("The report link is damaged.");
+  }
+  return validateDefinition(raw);
+}
 export function decodeDefinition(q: string | undefined | null): ReportDefinition {
   if (!q) return DEFAULT_DEFINITION;
   try {

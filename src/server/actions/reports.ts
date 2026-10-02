@@ -6,7 +6,9 @@ import { requireActor } from "@/lib/session";
 import { ForbiddenError, NotFoundError } from "@/server/policy";
 import { dimensionValues, InvalidDefinitionError } from "@/server/services/reports/builder";
 import { resolveFilters } from "@/server/services/reports/filters";
+import * as feed from "@/server/services/reports/feed";
 import * as saved from "@/server/services/reports/saved";
+import * as schedules from "@/server/services/reports/schedules";
 
 const id = z.uuid();
 
@@ -73,4 +75,44 @@ export async function builderDimensionValues(definition: unknown, dimension: str
   const actor = await requireActor();
   const p = z.record(z.string().max(40), z.string().max(100)).parse(params);
   return attempt(() => dimensionValues(actor, definition, z.string().max(40).parse(dimension), resolveFilters(actor, p)));
+}
+
+export async function createFeedTokenAction(input: { name: string; days: number }) {
+  const actor = await requireActor();
+  return attempt(async () => {
+    const r = await feed.createFeedToken(actor, input);
+    revalidatePath("/reports/powerbi");
+    return { token: r.token };
+  });
+}
+
+export async function revokeFeedTokenAction(tokenId: string) {
+  const actor = await requireActor();
+  return attempt(async () => {
+    await feed.revokeFeedToken(actor, id.parse(tokenId));
+    revalidatePath("/reports/powerbi");
+    return { ok: true as const };
+  });
+}
+
+export async function createScheduleAction(input: schedules.ScheduleInput) {
+  const actor = await requireActor();
+  return attempt(async () => {
+    const r = await schedules.createSchedule(actor, input);
+    revalidatePath(`/reports/saved/${r.reportId}`);
+    return { id: r.id };
+  });
+}
+
+export async function updateScheduleAction(scheduleId: string, reportId: string, op: "pause" | "resume" | "delete" | "send") {
+  const actor = await requireActor();
+  return attempt(async () => {
+    const sid = id.parse(scheduleId);
+    const o = z.enum(["pause", "resume", "delete", "send"]).parse(op);
+    if (o === "delete") await schedules.deleteSchedule(actor, sid);
+    else if (o === "send") await schedules.requestScheduleRun(actor, sid);
+    else await schedules.setScheduleActive(actor, sid, o === "resume");
+    revalidatePath(`/reports/saved/${id.parse(reportId)}`);
+    return { ok: true as const };
+  });
 }

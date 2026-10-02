@@ -8,6 +8,7 @@ import { filtersToParams } from "@/server/services/reports/filters";
 import { Card, EmptyState } from "@/components/ui/card";
 import { nf } from "@/components/reports/format";
 import { timeLabel } from "@/components/reports/result-format";
+import { ExportLinks } from "@/components/reports/export-links";
 import { NoReportAccess, ReportShell, qs, reportFilters } from "@/components/reports/report-page";
 import { fmt, money } from "@/lib/utils";
 
@@ -47,10 +48,11 @@ export default async function BuilderRecords(props: PageProps<"/reports/builder/
 
   return (
     <ReportShell actor={actor} tab="builder" filters={f} extra={{ q, k: JSON.stringify(keys), ...(back !== "/reports/builder" ? { from: back } : {}) }} subtitle={`${ds.label}${scope ? ` · ${scope}` : ""}${data ? ` · ${nf.format(data.rows.length)}${data.truncated ? "+" : ""} records` : ""}`}>
-      <div className="text-xs">
+      <div className="flex items-center justify-between text-xs">
         <Link href={`${back}${qs({ ...filtersToParams(f), ...(back === "/reports/builder" ? { q } : {}) })}`} className="text-zinc-600 hover:underline">
           ← Back to the report
         </Link>
+        {data && data.rows.length > 0 && <ExportLinks params={{ ...filtersToParams(f), kind: "records", q, k: JSON.stringify(keys) }} />}
       </div>
       <Card className="overflow-hidden">
         {blocked ? (

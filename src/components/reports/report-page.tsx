@@ -7,7 +7,7 @@ import { FilterTabs } from "@/components/ui/filter-tabs";
 import { EmptyState } from "@/components/ui/card";
 import { ReportFrame } from "./filter-bar";
 
-export type ReportTab = "overview" | "pipeline" | "snapshot" | "velocity" | "sources" | "offers" | "headcount" | "team" | "builder" | "saved";
+export type ReportTab = "overview" | "pipeline" | "snapshot" | "velocity" | "sources" | "offers" | "headcount" | "team" | "builder" | "saved" | "powerbi";
 
 const TABS: { key: ReportTab; label: string; path: string; team?: boolean }[] = [
   { key: "overview", label: "Overview", path: "/reports" },
@@ -20,6 +20,7 @@ const TABS: { key: ReportTab; label: string; path: string; team?: boolean }[] = 
   { key: "team", label: "Team", path: "/reports/team", team: true },
   { key: "builder", label: "Builder", path: "/reports/builder" },
   { key: "saved", label: "Saved", path: "/reports/saved" },
+  { key: "powerbi", label: "Power BI", path: "/reports/powerbi" },
 ];
 
 export function qs(params: Record<string, string | undefined>) {

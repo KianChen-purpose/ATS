@@ -119,6 +119,8 @@ export const approverType = pgEnum("approver_type", ["user", "hiring_manager", "
 export const emailDirection = pgEnum("email_direction", ["outbound", "inbound"]);
 /** Who can open a saved report or dashboard. Viewers always see numbers trimmed to their own access. */
 export const reportVisibility = pgEnum("report_visibility", ["private", "people", "everyone"]);
+export const reportFrequency = pgEnum("report_frequency", ["daily", "weekly", "monthly"]);
+export const reportFormat = pgEnum("report_format", ["xlsx", "csv"]);
 
 // ---------------------------------------------------------------------------
 // Organization
@@ -831,6 +833,64 @@ export const reportDashboardItems = pgTable(
   (t) => [primaryKey({ columns: [t.dashboardId, t.reportId] })],
 );
 
+/**
+ * Personal access tokens for the Power BI / Excel OData feed (PRD §7.3). The feed runs as the token's
+ * user, under their current role and job access. Only a SHA-256 of the token is stored.
+ */
+export const reportFeedTokens = pgTable(
+  "report_feed_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    /** First characters of the token, to tell tokens apart in the UI. */
+    prefix: text("prefix").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("report_feed_tokens_user_idx").on(t.userId)],
+);
+
+/**
+ * Scheduled delivery of a saved report by email (PRD §7.3). The worker sends each recipient their
+ * own copy, run under that recipient's access, never the owner's.
+ */
+export const reportSchedules = pgTable(
+  "report_schedules",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => savedReports.id, { onDelete: "restrict" }),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id),
+    frequency: reportFrequency("frequency").notNull().default("weekly"),
+    /** 0 = Monday … 6 = Sunday, for weekly schedules. */
+    dayOfWeek: integer("day_of_week"),
+    /** 1–28, for monthly schedules. */
+    dayOfMonth: integer("day_of_month"),
+    /** Local hour (0–23) in `timezone`. */
+    hour: integer("hour").notNull().default(8),
+    timezone: text("timezone").notNull().default("America/Toronto"),
+    format: reportFormat("format").notNull().default("xlsx"),
+    recipientIds: uuid("recipient_ids").array().notNull(),
+    active: boolean("active").notNull().default(true),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }).notNull(),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    /** Summary of the last run: delivered / skipped counts, never recipient addresses. */
+    lastResult: jsonb("last_result").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("report_schedules_due_idx").on(t.active, t.nextRunAt), index("report_schedules_report_idx").on(t.reportId)],
+);
+
 // ---------------------------------------------------------------------------
 // Files (ARCHITECTURE.md D9): bytes live in the FileStore; the database keeps metadata only
 // ---------------------------------------------------------------------------
@@ -1141,4 +1201,13 @@ export const reportDashboardSharesRelations = relations(reportDashboardShares, (
 export const reportDashboardItemsRelations = relations(reportDashboardItems, ({ one }) => ({
   dashboard: one(reportDashboards, { fields: [reportDashboardItems.dashboardId], references: [reportDashboards.id] }),
   report: one(savedReports, { fields: [reportDashboardItems.reportId], references: [savedReports.id] }),
+}));
+
+export const reportFeedTokensRelations = relations(reportFeedTokens, ({ one }) => ({
+  user: one(users, { fields: [reportFeedTokens.userId], references: [users.id] }),
+}));
+
+export const reportSchedulesRelations = relations(reportSchedules, ({ one }) => ({
+  report: one(savedReports, { fields: [reportSchedules.reportId], references: [savedReports.id] }),
+  owner: one(users, { fields: [reportSchedules.ownerId], references: [users.id] }),
 }));

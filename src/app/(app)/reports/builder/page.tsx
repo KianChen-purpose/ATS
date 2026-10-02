@@ -7,6 +7,7 @@ import { Card, CardHeader, EmptyState } from "@/components/ui/card";
 import { BuilderControls } from "@/components/reports/builder-controls";
 import { ResultView } from "@/components/reports/result-view";
 import { SaveReportButton } from "@/components/reports/save-report";
+import { ExportLinks } from "@/components/reports/export-links";
 import { NoReportAccess, ReportShell, qs, reportFilters } from "@/components/reports/report-page";
 
 export const metadata = { title: "Report builder" };
@@ -51,12 +52,15 @@ export default async function BuilderPage(props: PageProps<"/reports/builder">) 
           <CardHeader
             title={result ? `${result.dataset.label}${def.groupBy.length ? ` by ${result.columns.filter((c) => c.kind === "dimension").map((c) => c.label.toLowerCase()).join(" and ")}` : ""}` : "Report"}
             action={
-              <SaveReportButton
+              <span className="flex items-center gap-2">
+                {result && <ExportLinks params={{ ...params, kind: "builder", q }} />}
+                <SaveReportButton
                 definition={def}
                 filters={params}
                 people={people}
                 editing={editing ? { id: editing.id, name: editing.name, description: editing.description, visibility: editing.visibility, shareWith: editing.sharedWith.map((u) => u.id) } : null}
-              />
+                />
+              </span>
             }
           />
           {blocked ? <EmptyState title="Not available" description={blocked} /> : result && <ResultView result={result} recordsHref={recordsHref} />}

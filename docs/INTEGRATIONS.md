@@ -46,4 +46,22 @@ Restart the app. Settings → Integrations will show **Live · Microsoft Graph**
 | Reply sync into candidate timeline | 6 | Mail change notifications (webhooks) |
 | Entra SSO + SCIM | 6 | OIDC, SCIM provisioning |
 | SharePoint documents / Word offers | 3 | `/sites/{id}/drives` |
-| Power BI / Excel | 5 | OData feed |
+| Scheduled report email (Excel/CSV attached) | 5 | `POST /users/{careers@}/sendMail` from the worker |
+| Power BI / Excel | 5 | PATS OData v4 feed (below), not a Graph API |
+
+## Power BI and Excel (Phase 5)
+
+PATS publishes a read-only **OData v4 feed** at `/api/odata` for Power BI Desktop/Service and Excel ("Get data → OData feed"). Each person creates a **feed token** under **Reports → Power BI**; it's shown once and stored only as a SHA-256 hash.
+
+- **Sign-in:** choose *Basic* in the connector, any user name, the token as the password (or send `Authorization: Bearer <token>`). Entra ID ("Organizational account") sign-in for the feed comes with Entra SSO in Phase 6.
+- **Runs as the token's owner,** under their current role and job access, exactly like the screens. Deactivating the user, revoking the token or letting it expire (30–365 days) stops it.
+- **Tables:** Jobs, Openings, Applications, StageEvents, Interviews, Offers; plus InterviewerAssignments and People for roles with team analytics. Compensation columns appear only for roles that can see pay. No candidate names or contact details: candidates appear as `CandidateId` only.
+- **Query options:** `$top`, `$skip`, `$select`, `$count`. Server-driven paging returns 2,000 rows per page with `@odata.nextLink`. `$filter`, `$orderby` and `$expand` return **501** rather than unfiltered data, so filter in Power Query.
+- **Limits and audit:** 300 requests a minute per token; repeated bad tokens from one IP are throttled. Every page read writes a `report.exported` audit row (entity set, row count, token id).
+- **Store:** the feed reads through the reporting connection (`REPORTING_DATABASE_URL`, ARCHITECTURE.md D10).
+
+For a governed enterprise model, point a Fabric/Power BI dataflow at the feed (or at the reporting replica directly) and publish a shared semantic model; individual feed tokens then belong to the service account that owns the refresh.
+
+## Scheduled reports
+
+Saved reports can be emailed daily, weekly or monthly as Excel or CSV. The **worker** (`npm run worker`) sends them; web requests never send scheduled mail. Each recipient gets their own copy, run under their own access, from `M365_SENDER_MAILBOX`. Recipients who can no longer open the report are skipped. Each delivery writes a `report.delivered` audit row; `integration_events` records the send without the subject, body or attachment. Teams delivery arrives with the Teams app (Phase 6).

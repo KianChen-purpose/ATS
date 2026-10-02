@@ -14,7 +14,8 @@
     "db:reset": "tsx src/db/migrate.ts --reset && npm run db:seed",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "worker": "tsx --conditions=react-server --env-file-if-exists=.env src/worker/index.ts"
   },
   "dependencies": {
     "@date-fns/tz": "^1.5.0",

@@ -17,6 +17,8 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "report_schedules",
+    "report_feed_tokens",
     "report_dashboard_items",
     "report_dashboard_shares",
     "report_dashboards",

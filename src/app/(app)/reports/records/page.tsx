@@ -8,6 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { nf } from "@/components/reports/format";
 import { NoReportAccess, ReportShell, qs, reportFilters } from "@/components/reports/report-page";
 import { fmt } from "@/lib/utils";
+import { ExportLinks } from "@/components/reports/export-links";
 
 export const metadata = { title: "Report records" };
 
@@ -25,10 +26,11 @@ export default async function ReportRecords(props: PageProps<"/reports/records">
 
   return (
     <ReportShell actor={actor} tab="overview" filters={f} extra={Object.fromEntries(Object.entries(set).map(([k, v]) => [k, String(v)]))} subtitle={`${title} · ${nf.format(rows.length)}${truncated ? "+" : ""} records`}>
-      <div className="text-xs">
+      <div className="flex items-center justify-between text-xs">
         <Link href={`/reports${qs(filtersToParams(f))}`} className="text-zinc-600 hover:underline">
           ← Back to reports
         </Link>
+        {rows.length > 0 && <ExportLinks params={{ ...filtersToParams(f), kind: "drill", ...Object.fromEntries(Object.entries(set).map(([k, v]) => [k, String(v)])) }} />}
       </div>
       <Card className="overflow-hidden">
         {rows.length === 0 ? (
