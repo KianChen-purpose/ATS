@@ -36,7 +36,8 @@ export const applySchema = z.object({
 
 export type ApplyResult = { ok: true } | { ok: false; error: "job_closed" | "invalid" | "resume" | "answers"; field?: string };
 
-function resumeKind(file: { name: string; bytes: Buffer }) {
+/** The resume's real type from its bytes (PDF or DOCX, ≤ 5 MB), or null if it isn't acceptable. */
+export function resumeKind(file: { name: string; bytes: Buffer }) {
   const ext = file.name.toLowerCase().split(".").pop();
   const t = ext === "pdf" ? RESUME_TYPES.pdf : ext === "docx" ? RESUME_TYPES.docx : null;
   if (!t || file.bytes.length === 0 || file.bytes.length > RESUME_MAX_BYTES) return null;

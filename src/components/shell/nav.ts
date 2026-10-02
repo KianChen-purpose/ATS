@@ -6,6 +6,7 @@ import {
   Telescope,
   FileSignature,
   BadgeCheck,
+  UserPlus,
   BarChart3,
   Settings,
   type LucideIcon,
@@ -21,6 +22,7 @@ export const NAV: NavItem[] = [
   { href: "/sourcing", label: "Sourcing", icon: Telescope, shortcut: "G S" },
   { href: "/offers", label: "Offers", icon: FileSignature, shortcut: "G O" },
   { href: "/approvals", label: "Approvals", icon: BadgeCheck, shortcut: "G A" },
+  { href: "/referrals", label: "Referrals", icon: UserPlus, shortcut: "G F" },
   { href: "/reports", label: "Reports", icon: BarChart3, shortcut: "G R" },
 ];
 

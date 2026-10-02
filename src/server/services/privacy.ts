@@ -144,11 +144,12 @@ export async function anonymizeCandidate(actor: Actor, candidateId: string, opts
     await tx
       .update(s.activities)
       .set({ body: null })
-      .where(and(eq(s.activities.candidateId, candidateId), inArray(s.activities.type, ["note", "email"])));
+      .where(and(eq(s.activities.candidateId, candidateId), inArray(s.activities.type, ["note", "email", "application_created"])));
     if (appIds.length) {
       await tx.update(s.scorecards).set({ notes: null }).where(inArray(s.scorecards.applicationId, appIds));
       await tx.update(s.offers).set({ notes: null }).where(inArray(s.offers.applicationId, appIds));
       await tx.update(s.applicationAnswers).set({ value: null }).where(inArray(s.applicationAnswers.applicationId, appIds));
+      await tx.update(s.referrals).set({ note: null, relationship: null }).where(inArray(s.referrals.applicationId, appIds));
       // Interview titles are "Stage – Candidate Name": keep the stage.
       await tx
         .update(s.interviews)

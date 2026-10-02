@@ -690,6 +690,32 @@ export const applicationAnswers = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Referrals (PRD §4.8)
+// ---------------------------------------------------------------------------
+
+/** An employee's referral. Several people can refer the same application. */
+export const referrals = pgTable(
+  "referrals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    referrerId: uuid("referrer_id")
+      .notNull()
+      .references(() => users.id),
+    applicationId: uuid("application_id")
+      .notNull()
+      .references(() => applications.id, { onDelete: "restrict" }),
+    /** Job context for visibility (ARCHITECTURE.md §3.7). */
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+    relationship: text("relationship"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("referrals_referrer_idx").on(t.referrerId, t.createdAt), uniqueIndex("referrals_referrer_app_uq").on(t.referrerId, t.applicationId)],
+);
+
+// ---------------------------------------------------------------------------
 // Files (ARCHITECTURE.md D9): bytes live in the FileStore; the database keeps metadata only
 // ---------------------------------------------------------------------------
 
@@ -955,4 +981,10 @@ export const applicationQuestionsRelations = relations(applicationQuestions, ({ 
 export const applicationAnswersRelations = relations(applicationAnswers, ({ one }) => ({
   application: one(applications, { fields: [applicationAnswers.applicationId], references: [applications.id] }),
   question: one(applicationQuestions, { fields: [applicationAnswers.questionId], references: [applicationQuestions.id] }),
+}));
+
+export const referralsRelations = relations(referrals, ({ one }) => ({
+  referrer: one(users, { fields: [referrals.referrerId], references: [users.id] }),
+  application: one(applications, { fields: [referrals.applicationId], references: [applications.id] }),
+  job: one(jobs, { fields: [referrals.jobId], references: [jobs.id] }),
 }));
