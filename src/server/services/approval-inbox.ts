@@ -96,3 +96,11 @@ export async function approvalInbox(actor: UserActor) {
 export async function waitingCount(actor: UserActor) {
   return (await myPendingSteps(actor)).length;
 }
+
+/** The summary of one request for someone named on it as an approver (any step); null otherwise. */
+export async function approvalSummaryFor(actor: UserActor, requestId: string) {
+  const named = await db.query.approvalSteps.findFirst({ where: and(eq(s.approvalSteps.requestId, requestId), eq(s.approvalSteps.approverId, actor.id)) });
+  if (!named) return null;
+  const [item] = await summarize(actor, [requestId]);
+  return item ?? null;
+}

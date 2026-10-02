@@ -81,5 +81,5 @@ Per [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §10, foundation hardening come
 | 3 | Offers, approval chains (jobs + offers), approvals inbox, openings, Word offer letters (EN/FR-CA) | ✅ |
 | 4 | Career sites (multi-brand, EN/FR) + public jobs API, applications with questions/consent/resumes, referrals, talent pools & prospects | ✅ (agency portal, email sequences, browser extension later) |
 | 5 | Reporting: standard reports, drill-down, point-in-time snapshot, custom builder, saved reports & dashboards, Excel/CSV export, scheduled delivery, Power BI OData feed | ✅ (diversity reports, candidate NPS, agency spend later) |
-| 6 | Live M365: Entra SSO/SCIM, Graph mail sync, Teams app & approvals (SSO can go live earlier, once tenant consent is ready) | ⏳ |
+| 6 | Live M365: Entra SSO (delegated Graph), SCIM provisioning, queue + two-way mail sync, Teams app with approval cards | ✅ (needs tenant consent, an Azure Bot and a public https URL to go live) |
 | 7 | AI assist: application review, notes, summaries, drafting | ⏳ |

@@ -66,7 +66,7 @@ Supported: `GET/POST /Users`, `GET/PUT/PATCH/DELETE /Users/{id}`, `GET/POST /Gro
 | Free/busy | 2 | `POST /users/{id}/calendar/getSchedule` |
 | Interview events + Teams links | 2 | `POST /users/{id}/events` (`isOnlineMeeting`) |
 | Cancel/reschedule | 2 | `POST /events/{id}/cancel`, `PATCH /events/{id}` |
-| Teams notifications & approvals | 3, 6 | `sendActivityNotification`, Bot Framework + Adaptive Cards |
+| Teams notifications & approvals | 3, 6 | `sendActivityNotification`; Bot Framework + Adaptive Cards (`Action.Execute`) |
 | Reply sync into candidate timeline | 6 | Mail change notifications + delta query, `/users/{id}/messages/{id}` |
 | Entra SSO + SCIM | 6 | OIDC (auth code + PKCE), SCIM 2.0 `/api/scim/v2` |
 | SharePoint documents / Word offers | 3 | `/sites/{id}/drives` |
@@ -81,6 +81,14 @@ Candidate replies appear on the candidate's **Emails** tab and timeline, and the
 - **How:** Graph change notifications on each Inbox post to `<APP_URL>/api/graph/notifications`. The endpoint answers Graph's `validationToken` handshake, checks every notification's `clientState` against a per-subscription secret (stored hashed), and only enqueues a job with ids. The **worker** fetches the message and imports it once (a unique index on the message id stops duplicates across mailboxes and retries). A **delta query every 15 minutes** catches anything a notification missed, and the worker creates, renews (they last ~70 hours) and removes subscriptions every hour. Subscriptions need a public `https://` `APP_URL`.
 - **Queue:** background work goes through the queue port (`src/server/integrations/queue`). The Postgres adapter retries with exponential backoff and dead-letters after 5 attempts; failures show under Settings → Integrations, with errors redacted. Azure Service Bus can replace it behind the same interface.
 - **Mock mode:** there's no inbox, so use **Simulate reply** on a sent email in a candidate's Emails tab; it goes through the same import path.
+
+## Microsoft Teams app (Phase 6)
+
+The PATS Teams app has a personal-scope bot that sends **approval cards** (Adaptive Cards 1.5): approvers approve or reject a job or offer in Teams, with a comment (required to reject). Decisions run through the same service as the web inbox, as the PATS user mapped to the Teams user by Entra object id, so "is it your turn", audit and outcomes are identical. A card refreshes when the approver opens it and is updated when the step is decided anywhere, so it never shows stale buttons. Card contents follow the approver-summary rule; pay is hidden from roles that can't see it. Activity-feed notifications (new applications, feedback due, candidate replies) keep using Graph `sendActivityNotification`.
+
+1. Create an **Azure Bot** resource (single-tenant, Canada region) and note its app id and secret. Set `TEAMS_BOT_APP_ID` and `TEAMS_BOT_APP_SECRET` (Key Vault); messaging endpoint `<APP_URL>/api/teams/messages`; enable the Microsoft Teams channel.
+2. Download the app package from **Settings → Integrations → Microsoft Teams app**, upload it in the Teams admin center, and pre-install it for PATS users with an app setup policy. Set `TEAMS_PRIVACY_URL` and `TEAMS_TERMS_URL` before publishing. Replace the placeholder icons with Purpose-designed ones.
+3. Every request to the messaging endpoint must carry a Bot Framework token (issuer `https://api.botframework.com`, audience the bot id, matching `serviceUrl`), checked before the activity is read. PATS only ever posts to Microsoft Bot Connector hosts.
 
 ## Power BI and Excel (Phase 5)
 

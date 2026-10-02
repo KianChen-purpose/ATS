@@ -6,6 +6,8 @@ import { requireActor } from "@/lib/session";
 import { m365Configured } from "@/server/integrations/m365";
 import { queueStats } from "@/server/integrations/queue";
 import { mailSyncStatus } from "@/server/services/mail-sync";
+import { teamsStatus } from "@/server/services/teams-app";
+import { buttonClass } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 import { Card, CardHeader, EmptyState } from "@/components/ui/card";
@@ -27,7 +29,7 @@ export default async function IntegrationsPage() {
   const user = await requireActor();
   if (!canViewSettings(user)) notFound();
   const live = m365Configured();
-  const [events, jobs, sync] = await Promise.all([listIntegrationEvents(user), queueStats(), mailSyncStatus()]);
+  const [events, jobs, sync, teams] = await Promise.all([listIntegrationEvents(user), queueStats(), mailSyncStatus(), teamsStatus()]);
 
   return (
     <>
@@ -68,6 +70,28 @@ export default async function IntegrationsPage() {
             </Card>
           ))}
         </div>
+
+        <Card>
+          <CardHeader
+            title="Microsoft Teams app"
+            action={
+              <a href="/api/teams/app-package" className={buttonClass("secondary", "sm")} download>
+                Download app package
+              </a>
+            }
+          />
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3 text-[13px]">
+            <span>
+              Bot: {teams.botConfigured ? <Badge tone="green">Connected</Badge> : <Badge tone="amber">Mock (set TEAMS_BOT_APP_ID / TEAMS_BOT_APP_SECRET)</Badge>}
+            </span>
+            <span>
+              Installed by <strong>{teams.installedUsers}</strong> {teams.installedUsers === 1 ? "person" : "people"}
+            </span>
+          </div>
+          <p className="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
+            Upload the package in the Teams admin center and pre-install it for PATS users. Approvers then get an Adaptive Card for each approval and can approve or reject in Teams; the card updates when the step is decided anywhere. Messaging endpoint for the Azure Bot: <code>{"<APP_URL>"}/api/teams/messages</code>.
+          </p>
+        </Card>
 
         <Card>
           <CardHeader title="Mail sync & background jobs" />

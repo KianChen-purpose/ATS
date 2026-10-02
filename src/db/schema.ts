@@ -1005,6 +1005,35 @@ export const mailSyncState = pgTable("mail_sync_state", {
 });
 
 // ---------------------------------------------------------------------------
+// Microsoft Teams app (bot + Adaptive Cards)
+// ---------------------------------------------------------------------------
+
+/** The personal chat between the PATS bot and a user, captured when they install the app. */
+export const teamsConversations = pgTable("teams_conversations", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references((): AnyPgColumn => users.id),
+  aadObjectId: text("aad_object_id").notNull(),
+  conversationId: text("conversation_id").notNull(),
+  serviceUrl: text("service_url").notNull(),
+  tenantId: text("tenant_id"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Approval cards sent to approvers, so they can be updated once the step is decided. */
+export const teamsCardMessages = pgTable("teams_card_messages", {
+  stepId: uuid("step_id")
+    .primaryKey()
+    .references((): AnyPgColumn => approvalSteps.id),
+  userId: uuid("user_id")
+    .notNull()
+    .references((): AnyPgColumn => users.id),
+  activityId: text("activity_id").notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }),
+});
+
+// ---------------------------------------------------------------------------
 // Files (ARCHITECTURE.md D9): bytes live in the FileStore; the database keeps metadata only
 // ---------------------------------------------------------------------------
 
