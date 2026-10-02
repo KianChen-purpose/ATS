@@ -117,6 +117,8 @@ export const approvalStepStatus = pgEnum("approval_step_status", ["pending", "ap
 /** Who approves a chain step: a named person, or a role resolved from the job when the request starts. */
 export const approverType = pgEnum("approver_type", ["user", "hiring_manager", "recruiter"]);
 export const emailDirection = pgEnum("email_direction", ["outbound", "inbound"]);
+/** Who can open a saved report or dashboard. Viewers always see numbers trimmed to their own access. */
+export const reportVisibility = pgEnum("report_visibility", ["private", "people", "everyone"]);
 
 // ---------------------------------------------------------------------------
 // Organization
@@ -749,6 +751,87 @@ export const referrals = pgTable(
 );
 
 // ---------------------------------------------------------------------------
+// Reporting (PRD §7.2): saved custom reports and dashboards
+// ---------------------------------------------------------------------------
+
+/**
+ * A saved custom report. `definition` is a validated builder definition (services/reports/builder.ts):
+ * whitelisted dataset, dimensions and metrics, never SQL. Each viewer runs it under their own access.
+ */
+export const savedReports = pgTable(
+  "saved_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description"),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id),
+    definition: jsonb("definition").$type<Record<string, unknown>>().notNull(),
+    /** Default filter row (range preset, brand, department, job) the report opens with. */
+    filters: jsonb("filters").$type<Record<string, string>>().notNull().default({}),
+    visibility: reportVisibility("visibility").notNull().default("private"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("saved_reports_owner_idx").on(t.ownerId)],
+);
+
+/** People a `people`-visibility report or dashboard is shared with. */
+export const savedReportShares = pgTable(
+  "saved_report_shares",
+  {
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => savedReports.id, { onDelete: "restrict" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+  },
+  (t) => [primaryKey({ columns: [t.reportId, t.userId] }), index("saved_report_shares_user_idx").on(t.userId)],
+);
+
+export const reportDashboards = pgTable("report_dashboards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  ownerId: uuid("owner_id")
+    .notNull()
+    .references(() => users.id),
+  visibility: reportVisibility("visibility").notNull().default("private"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const reportDashboardShares = pgTable(
+  "report_dashboard_shares",
+  {
+    dashboardId: uuid("dashboard_id")
+      .notNull()
+      .references(() => reportDashboards.id, { onDelete: "restrict" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id),
+  },
+  (t) => [primaryKey({ columns: [t.dashboardId, t.userId] })],
+);
+
+/** Ordered tiles on a dashboard; each one is a saved report. */
+export const reportDashboardItems = pgTable(
+  "report_dashboard_items",
+  {
+    dashboardId: uuid("dashboard_id")
+      .notNull()
+      .references(() => reportDashboards.id, { onDelete: "restrict" }),
+    reportId: uuid("report_id")
+      .notNull()
+      .references(() => savedReports.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.dashboardId, t.reportId] })],
+);
+
+// ---------------------------------------------------------------------------
 // Files (ARCHITECTURE.md D9): bytes live in the FileStore; the database keeps metadata only
 // ---------------------------------------------------------------------------
 
@@ -1032,4 +1115,30 @@ export const talentPoolMembersRelations = relations(talentPoolMembers, ({ one })
   pool: one(talentPools, { fields: [talentPoolMembers.poolId], references: [talentPools.id] }),
   candidate: one(candidates, { fields: [talentPoolMembers.candidateId], references: [candidates.id] }),
   addedBy: one(users, { fields: [talentPoolMembers.addedById], references: [users.id] }),
+}));
+
+export const savedReportsRelations = relations(savedReports, ({ one, many }) => ({
+  owner: one(users, { fields: [savedReports.ownerId], references: [users.id] }),
+  shares: many(savedReportShares),
+}));
+
+export const savedReportSharesRelations = relations(savedReportShares, ({ one }) => ({
+  report: one(savedReports, { fields: [savedReportShares.reportId], references: [savedReports.id] }),
+  user: one(users, { fields: [savedReportShares.userId], references: [users.id] }),
+}));
+
+export const reportDashboardsRelations = relations(reportDashboards, ({ one, many }) => ({
+  owner: one(users, { fields: [reportDashboards.ownerId], references: [users.id] }),
+  shares: many(reportDashboardShares),
+  items: many(reportDashboardItems),
+}));
+
+export const reportDashboardSharesRelations = relations(reportDashboardShares, ({ one }) => ({
+  dashboard: one(reportDashboards, { fields: [reportDashboardShares.dashboardId], references: [reportDashboards.id] }),
+  user: one(users, { fields: [reportDashboardShares.userId], references: [users.id] }),
+}));
+
+export const reportDashboardItemsRelations = relations(reportDashboardItems, ({ one }) => ({
+  dashboard: one(reportDashboards, { fields: [reportDashboardItems.dashboardId], references: [reportDashboards.id] }),
+  report: one(savedReports, { fields: [reportDashboardItems.reportId], references: [savedReports.id] }),
 }));

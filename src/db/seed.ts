@@ -17,6 +17,11 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "report_dashboard_items",
+    "report_dashboard_shares",
+    "report_dashboards",
+    "saved_report_shares",
+    "saved_reports",
     "talent_pool_members",
     "talent_pools",
     "referrals",
@@ -785,6 +790,23 @@ async function main() {
       await db.insert(s.talentPoolMembers).values({ poolId: p.pool, candidateId: c.id, stage: p.stage, addedById: recruiter.id });
       await db.insert(s.activities).values({ candidateId: c.id, type: "note", actorId: recruiter.id, body: "Sourced as a prospect", createdAt: daysAgo(10) });
     }
+  }
+
+  console.log("Creating saved reports…");
+  {
+    const owner = userByName["Maya Thompson"];
+    const defs = [
+      { name: "Applications per month by source type", description: "Where applications come from, month by month.", definition: { dataset: "applications", dateField: "applied_at", groupBy: ["month", "source_category"], metrics: ["count"], filters: [], visualization: "pivot" } },
+      { name: "Weekly applications", description: null, definition: { dataset: "applications", dateField: "applied_at", groupBy: ["week"], metrics: ["count", "hired"], filters: [], visualization: "line" } },
+      { name: "Hire rate by brand", description: "Hires ÷ applications, for applications in the range.", definition: { dataset: "applications", dateField: "applied_at", groupBy: ["brand"], metrics: ["count", "hired", "hire_rate"], filters: [], visualization: "bar" } },
+      { name: "Offer outcomes by department", description: null, definition: { dataset: "offers", dateField: "created_at", groupBy: ["department"], metrics: ["count", "accepted", "acceptance_rate"], filters: [], visualization: "bar" } },
+    ];
+    const reports = await db
+      .insert(s.savedReports)
+      .values(defs.map((d) => ({ ...d, ownerId: owner.id, visibility: "everyone" as const, filters: { range: "180d" } })))
+      .returning();
+    const [dash] = await db.insert(s.reportDashboards).values({ name: "Recruiting overview", description: "The weekly numbers for the recruiting team.", ownerId: owner.id, visibility: "everyone" }).returning();
+    await db.insert(s.reportDashboardItems).values(reports.map((r, position) => ({ dashboardId: dash.id, reportId: r.id, position })));
   }
 
   const counts = await db.execute(sql`SELECT
