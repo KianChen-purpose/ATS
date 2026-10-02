@@ -66,7 +66,7 @@ describe("approvals inbox", () => {
   });
 
   it("people who aren't named on a request never see it", async () => {
-    const w = await world();
+    await world();
     const other = userActor(await makeUser("executive"));
     expect(await approvalInbox(other)).toEqual({ waiting: [], recent: [] });
   });

@@ -4,6 +4,8 @@ export function markdownToHtml(md: string) {
   const inline = (s: string) => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*(.+?)\*/g, "<em>$1</em>");
   return md
     .split(/\n{2,}/)
+    .map((b) => b.trim())
+    .filter(Boolean)
     .map((block) => {
       if (block.startsWith("## ")) return `<h2>${inline(block.slice(3))}</h2>`;
       if (block.split("\n").every((l) => l.startsWith("- "))) return `<ul>${block.split("\n").map((l) => `<li>${inline(l.slice(2))}</li>`).join("")}</ul>`;
