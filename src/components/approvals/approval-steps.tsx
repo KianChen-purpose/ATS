@@ -28,7 +28,7 @@ export function ApprovalSteps({ steps, timezone }: { steps: Step[]; timezone?: s
               <div className="font-medium">
                 {st.approver.name}
                 <span className="ml-1.5 text-xs font-normal text-zinc-500">
-                  {st.id === current ? "Their turn" : label}
+                  {st.id === current ? "Up next" : label}
                   {st.decidedAt && ` · ${fmt(st.decidedAt, "MMM d, h:mm a", timezone)}`}
                 </span>
               </div>
