@@ -160,11 +160,53 @@ export const users = pgTable("users", {
   role: userRole("role").notNull().default("interviewer"),
   /** Entra ID object id once SSO/SCIM is connected. */
   entraObjectId: text("entra_object_id").unique(),
+  /** SCIM externalId sent by the provisioning service (map it to objectId in Entra). */
+  scimExternalId: text("scim_external_id").unique(),
   managerId: uuid("manager_id").references((): AnyPgColumn => users.id),
   timezone: text("timezone").notNull().default("America/Toronto"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Provisioning (SCIM 2.0, ARCHITECTURE.md §6.1)
+// ---------------------------------------------------------------------------
+
+/** Bearer tokens for the Entra provisioning service. Only a SHA-256 is stored. */
+export const scimTokens = pgTable("scim_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  tokenHash: text("token_hash").notNull().unique(),
+  prefix: text("prefix").notNull(),
+  createdById: uuid("created_by_id").references((): AnyPgColumn => users.id),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Entra groups pushed by SCIM. A group can grant a PATS role. */
+export const scimGroups = pgTable("scim_groups", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  displayName: text("display_name").notNull(),
+  externalId: text("external_id").unique(),
+  /** PATS role members get; null = the group doesn't affect roles. */
+  role: userRole("role"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const scimGroupMembers = pgTable(
+  "scim_group_members",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => scimGroups.id, { onDelete: "restrict" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references((): AnyPgColumn => users.id),
+  },
+  (t) => [primaryKey({ columns: [t.groupId, t.userId] }), index("scim_group_members_user_idx").on(t.userId)],
+);
 
 /**
  * Delegated Microsoft Graph consent for a user (ARCHITECTURE.md §8.1): PATS sends mail and creates

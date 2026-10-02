@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleDashed, Mail, CalendarDays, MessageSquare, FolderOpen, ShieldCheck, BarChart3 } from "lucide-react";
+import { CheckCircle2, Mail, CalendarDays, MessageSquare, FolderOpen, ShieldCheck, BarChart3 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { canViewSettings } from "@/server/policy";
 import { listIntegrationEvents } from "@/server/services/users";
@@ -13,12 +13,12 @@ import { timeAgo } from "@/lib/utils";
 export const metadata = { title: "Integrations" };
 
 const SERVICES = [
-  { key: "directory", name: "Entra ID", icon: ShieldCheck, desc: "SSO, MFA, SCIM user provisioning, manager hierarchy", status: "phase" as const, phase: "Phase 6" },
+  { key: "directory", name: "Entra ID", icon: ShieldCheck, desc: "Microsoft sign-in, MFA via Conditional Access, SCIM provisioning (Settings → Identity)", status: "ready" as const },
   { key: "mail", name: "Outlook Mail", icon: Mail, desc: "Send candidate email from your mailbox or careers@, sync replies", status: "ready" as const },
   { key: "calendar", name: "Outlook Calendar", icon: CalendarDays, desc: "Free/busy, create and cancel interview events, rooms", status: "ready" as const },
   { key: "teams", name: "Microsoft Teams", icon: MessageSquare, desc: "Teams meeting links on interviews, notifications and approvals", status: "ready" as const },
-  { key: "sharepoint", name: "SharePoint & Word", icon: FolderOpen, desc: "Resume and offer letter storage, Word offer templates", status: "phase" as const, phase: "Phase 3" },
-  { key: "powerbi", name: "Power BI & Excel", icon: BarChart3, desc: "Refreshable OData feed and certified dataset", status: "phase" as const, phase: "Phase 5" },
+  { key: "sharepoint", name: "SharePoint & Word", icon: FolderOpen, desc: "Word offer templates and letters (FileStore); SharePoint library adapter later", status: "ready" as const },
+  { key: "powerbi", name: "Power BI & Excel", icon: BarChart3, desc: "Refreshable OData feed (Reports → Power BI)", status: "ready" as const },
 ];
 
 export default async function IntegrationsPage() {
@@ -50,22 +50,16 @@ export default async function IntegrationsPage() {
           {SERVICES.map((svc) => (
             <Card key={svc.key} className="p-4">
               <div className="flex items-start gap-3">
-                <div className="rounded-md bg-sky-50 p-2 text-sky-700">
+                <div className="rounded-md bg-zinc-100 p-2 text-zinc-800">
                   <svc.icon size={18} />
                 </div>
                 <div className="min-w-0">
                   <div className="font-semibold">{svc.name}</div>
                   <div className="mt-0.5 text-xs text-zinc-500">{svc.desc}</div>
                   <div className="mt-2">
-                    {svc.status === "ready" ? (
-                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
-                        <CheckCircle2 size={13} /> {live ? "Connected" : "Ready (mock)"}
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-xs text-zinc-500">
-                        <CircleDashed size={13} /> {svc.phase}
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                      <CheckCircle2 size={13} /> {live ? "Connected" : "Ready (mock)"}
+                    </span>
                   </div>
                 </div>
               </div>

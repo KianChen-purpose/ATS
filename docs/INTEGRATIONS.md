@@ -40,6 +40,17 @@ Setting the three `M365_*` credentials also turns on **Sign in with Microsoft** 
 
 Demo sign-in stays available only with `PATS_DEMO_AUTH=true` outside production.
 
+## User provisioning (SCIM 2.0)
+
+Entra keeps PATS accounts in step with the directory through SCIM (`/api/scim/v2`, Users and Groups).
+
+1. In **Settings → Identity**, create a SCIM token (shown once, stored hashed).
+2. In the PATS enterprise app in Entra: Provisioning → Automatic. Tenant URL `<APP_URL>/api/scim/v2`, secret token from step 1. Map `objectId` → `externalId` (PATS then links sign-ins to the account by object id).
+3. Assign users and groups to the app. New people start as **Interviewer** until a role applies, from an Entra app role at sign-in or a group mapped to a role in Settings → Identity (the highest wins; use one method).
+4. Unassigning or disabling someone in Entra **deactivates** them in PATS: they can't sign in, existing sessions stop, and their stored Microsoft token is deleted. Their history stays; DELETE requests also only deactivate.
+
+Supported: `GET/POST /Users`, `GET/PUT/PATCH/DELETE /Users/{id}`, `GET/POST /Groups`, `GET/PATCH/DELETE /Groups/{id}`, `ServiceProviderConfig`; filters `attribute eq "value"` on userName, externalId, id and displayName; `startIndex`/`count` paging; `excludedAttributes=members`. Every change is audited as the `scim` system actor.
+
 ## Reliability rules
 
 - Every Graph call honours `429`/`503` responses and their `Retry-After` header, with exponential backoff.
