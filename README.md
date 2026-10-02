@@ -42,7 +42,7 @@ Public career sites run at `/careers` (all brands) and `/careers/<brand>` (e.g. 
 | `npm run db:seed` | Wipe and reload demo data (deterministic) |
 | `npm run db:reset` | Local only: drop the database, migrate from scratch, reseed |
 | `npm test` | Run the test suite (vitest) against a throwaway `pats_test` Postgres database, built from the migrations |
-| `npm run worker` | Background worker: sends scheduled reports (later email sync, reminders, retention). `-- --once` for one pass |
+| `npm run worker` | Background worker: job queue (mail sync, Graph subscriptions) and scheduled reports. `-- --once` for one pass |
 | `npm run typecheck` / `npm run lint` | Checks |
 
 ## Microsoft 365

@@ -1,3 +1,4 @@
+import { canSimulateReplies } from "@/server/services/mail-sync";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
@@ -32,6 +33,7 @@ export default async function CandidatePage(props: PageProps<"/candidates/[id]">
           user={user}
           selectedAppId={selectedAppId}
           appHref={(appId) => `/candidates/${id}?app=${appId}`}
+          simulateReplies={canSimulateReplies()}
         />
       </div>
     </div>

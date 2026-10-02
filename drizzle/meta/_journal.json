@@ -127,6 +127,13 @@
       "when": 1790983426003,
       "tag": "0017_scim",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790983837859,
+      "tag": "0018_mail_sync_queue",
+      "breakpoints": true
     }
   ]
 }

@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const SESSION_COOKIE = "pats_session";
 // Candidate-facing and auth routes don't need a staff session.
 // /api/odata authenticates with a feed token (Power BI), not a session cookie.
-const PUBLIC_PREFIXES = ["/login", "/auth/", "/careers", "/schedule", "/api/public", "/api/odata", "/api/scim/", "/_next", "/favicon"];
+const PUBLIC_PREFIXES = ["/login", "/auth/", "/careers", "/schedule", "/api/public", "/api/odata", "/api/scim/", "/api/graph/", "/_next", "/favicon"];
 
 /** Optimistic check only: real verification happens in requireUser(). */
 export function proxy(request: NextRequest) {

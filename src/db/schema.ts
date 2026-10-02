@@ -14,7 +14,7 @@ import {
   uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -121,6 +121,7 @@ export const emailDirection = pgEnum("email_direction", ["outbound", "inbound"])
 export const reportVisibility = pgEnum("report_visibility", ["private", "people", "everyone"]);
 export const reportFrequency = pgEnum("report_frequency", ["daily", "weekly", "monthly"]);
 export const reportFormat = pgEnum("report_format", ["xlsx", "csv"]);
+export const jobStatusQueue = pgEnum("queue_job_status", ["queued", "running", "done", "dead"]);
 
 // ---------------------------------------------------------------------------
 // Organization
@@ -579,7 +580,13 @@ export const emails = pgTable(
     externalMessageId: text("external_message_id"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("emails_candidate_idx").on(t.candidateId), index("emails_application_idx").on(t.applicationId)],
+  (t) => [
+    index("emails_candidate_idx").on(t.candidateId),
+    index("emails_application_idx").on(t.applicationId),
+    index("emails_thread_idx").on(t.externalThreadId),
+    // A synced reply is stored once, however many mailboxes it reached.
+    uniqueIndex("emails_inbound_message_uq").on(t.externalMessageId).where(sql`direction = 'inbound'`),
+  ],
 );
 
 // ---------------------------------------------------------------------------
@@ -947,6 +954,55 @@ export const reportSchedules = pgTable(
   },
   (t) => [index("report_schedules_due_idx").on(t.active, t.nextRunAt), index("report_schedules_report_idx").on(t.reportId)],
 );
+
+// ---------------------------------------------------------------------------
+// Background work (ARCHITECTURE.md D5) and Microsoft Graph sync
+// ---------------------------------------------------------------------------
+
+/**
+ * Postgres-backed queue behind the queue port (Azure Service Bus can replace it). Payloads carry ids
+ * only, never email bodies or other personal data (§4.6).
+ */
+export const jobQueue = pgTable(
+  "job_queue",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    status: jobStatusQueue("status").notNull().default("queued"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    runAt: timestamp("run_at", { withTimezone: true }).notNull().defaultNow(),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
+    /** Redacted, truncated error from the last failed attempt. */
+    lastError: text("last_error"),
+    /** Enqueuing the same key twice is a no-op (periodic jobs, retried webhooks). */
+    dedupeKey: text("dedupe_key").unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("job_queue_ready_idx").on(t.status, t.runAt)],
+);
+
+/** Graph change-notification subscriptions on mailboxes PATS syncs. */
+export const graphSubscriptions = pgTable("graph_subscriptions", {
+  /** The subscription id Graph returned. */
+  id: text("id").primaryKey(),
+  mailbox: text("mailbox").notNull().unique(),
+  /** Null for the shared mailbox; the user whose delegated consent the subscription uses otherwise. */
+  userId: uuid("user_id").references((): AnyPgColumn => users.id),
+  /** SHA-256 of the clientState secret Graph echoes on every notification. */
+  clientStateHash: text("client_state_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Delta-query position per mailbox, the fallback for missed notifications. */
+export const mailSyncState = pgTable("mail_sync_state", {
+  mailbox: text("mailbox").primaryKey(),
+  deltaLink: text("delta_link"),
+  lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }),
+});
 
 // ---------------------------------------------------------------------------
 // Files (ARCHITECTURE.md D9): bytes live in the FileStore; the database keeps metadata only

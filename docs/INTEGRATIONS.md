@@ -67,11 +67,20 @@ Supported: `GET/POST /Users`, `GET/PUT/PATCH/DELETE /Users/{id}`, `GET/POST /Gro
 | Interview events + Teams links | 2 | `POST /users/{id}/events` (`isOnlineMeeting`) |
 | Cancel/reschedule | 2 | `POST /events/{id}/cancel`, `PATCH /events/{id}` |
 | Teams notifications & approvals | 3, 6 | `sendActivityNotification`, Bot Framework + Adaptive Cards |
-| Reply sync into candidate timeline | 6 | Mail change notifications (webhooks) |
-| Entra SSO + SCIM | 6 | OIDC, SCIM provisioning |
+| Reply sync into candidate timeline | 6 | Mail change notifications + delta query, `/users/{id}/messages/{id}` |
+| Entra SSO + SCIM | 6 | OIDC (auth code + PKCE), SCIM 2.0 `/api/scim/v2` |
 | SharePoint documents / Word offers | 3 | `/sites/{id}/drives` |
 | Scheduled report email (Excel/CSV attached) | 5 | `POST /users/{careers@}/sendMail` from the worker |
 | Power BI / Excel | 5 | PATS OData v4 feed (below), not a Graph API |
+
+## Two-way email (mail sync, Phase 6)
+
+Candidate replies appear on the candidate's **Emails** tab and timeline, and the person who emailed them gets a Teams notification (no message text in it).
+
+- **Where from:** the shared mailbox (`M365_SENDER_MAILBOX`, application permission `Mail.Read`) and the mailbox of every user who has signed in with Microsoft (their delegated consent). What's imported is narrow by design: from any mailbox, only replies in a conversation PATS started (matched by Graph `conversationId`); from the shared mailbox, also mail from an address that belongs to exactly one candidate. **Nothing else in a user's mailbox is read into PATS.** Mail from staff addresses, and replies for anonymized candidates, are skipped.
+- **How:** Graph change notifications on each Inbox post to `<APP_URL>/api/graph/notifications`. The endpoint answers Graph's `validationToken` handshake, checks every notification's `clientState` against a per-subscription secret (stored hashed), and only enqueues a job with ids. The **worker** fetches the message and imports it once (a unique index on the message id stops duplicates across mailboxes and retries). A **delta query every 15 minutes** catches anything a notification missed, and the worker creates, renews (they last ~70 hours) and removes subscriptions every hour. Subscriptions need a public `https://` `APP_URL`.
+- **Queue:** background work goes through the queue port (`src/server/integrations/queue`). The Postgres adapter retries with exponential backoff and dead-letters after 5 attempts; failures show under Settings → Integrations, with errors redacted. Azure Service Bus can replace it behind the same interface.
+- **Mock mode:** there's no inbox, so use **Simulate reply** on a sent email in a candidate's Emails tab; it goes through the same import path.
 
 ## Power BI and Excel (Phase 5)
 

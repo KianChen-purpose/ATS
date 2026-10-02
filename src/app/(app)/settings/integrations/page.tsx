@@ -4,6 +4,8 @@ import { canViewSettings } from "@/server/policy";
 import { listIntegrationEvents } from "@/server/services/users";
 import { requireActor } from "@/lib/session";
 import { m365Configured } from "@/server/integrations/m365";
+import { queueStats } from "@/server/integrations/queue";
+import { mailSyncStatus } from "@/server/services/mail-sync";
 import { PageHeader } from "@/components/ui/page-header";
 import { SettingsTabs } from "@/components/settings/settings-tabs";
 import { Card, CardHeader, EmptyState } from "@/components/ui/card";
@@ -25,7 +27,7 @@ export default async function IntegrationsPage() {
   const user = await requireActor();
   if (!canViewSettings(user)) notFound();
   const live = m365Configured();
-  const events = await listIntegrationEvents(user);
+  const [events, jobs, sync] = await Promise.all([listIntegrationEvents(user), queueStats(), mailSyncStatus()]);
 
   return (
     <>
@@ -66,6 +68,38 @@ export default async function IntegrationsPage() {
             </Card>
           ))}
         </div>
+
+        <Card>
+          <CardHeader title="Mail sync & background jobs" />
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3 text-[13px] md:grid-cols-4">
+            <div>
+              <dt className="text-xs text-zinc-500">Mailbox subscriptions</dt>
+              <dd className="font-medium">
+                {sync.subscriptions}
+                {sync.expiring > 0 && <span className="ml-1 text-xs font-normal text-amber-800">({sync.expiring} renewing)</span>}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-zinc-500">Last delta sync</dt>
+              <dd className="font-medium">{sync.lastSyncedAt ? timeAgo(sync.lastSyncedAt) : "Not yet"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-zinc-500">Jobs queued / running</dt>
+              <dd className="font-medium">
+                {jobs.queued ?? 0} / {jobs.running ?? 0}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs text-zinc-500">Failed (dead-lettered)</dt>
+              <dd className={jobs.dead ? "font-medium text-red-700" : "font-medium"}>{jobs.dead ?? 0}</dd>
+            </div>
+          </dl>
+          <p className="border-t border-zinc-100 px-4 py-2 text-xs text-zinc-500">
+            {live
+              ? "Candidate replies to careers@ and to emails sent from PATS are synced into the candidate's Emails tab by the worker (npm run worker). Other mail in users' mailboxes is never read into PATS."
+              : "Mock mode: there's no real inbox. Use “Simulate reply” on a sent email in a candidate's Emails tab to demo two-way email."}
+          </p>
+        </Card>
 
         <Card>
           <CardHeader title="Integration activity" />

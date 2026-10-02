@@ -17,6 +17,7 @@ import { InterviewRowActions } from "./interview-row-actions";
 import { DebriefMatrix } from "./debrief-matrix";
 import { OfferCard } from "@/components/offers/offer-card";
 import { OfferForm } from "@/components/offers/offer-form";
+import { SimulateReply } from "./simulate-reply";
 
 type Options = {
   archiveReasons: { id: string; name: string; category: string }[];
@@ -31,6 +32,7 @@ export function CandidateProfileView({
   user,
   selectedAppId,
   appHref,
+  simulateReplies = false,
 }: {
   profile: CandidateProfile;
   options: Options;
@@ -38,6 +40,8 @@ export function CandidateProfileView({
   selectedAppId?: string;
   /** Build a link that selects a different application. */
   appHref: (appId: string) => string;
+  /** Demo (mock mode): offer "Simulate reply" on sent emails. */
+  simulateReplies?: boolean;
 }) {
   const c = profile;
   const name = `${c.firstName} ${c.lastName}`;
@@ -279,7 +283,11 @@ export function CandidateProfileView({
                             {e.direction === "outbound" ? `${e.fromAddress} → ${e.toAddress}` : `${e.fromAddress} → you`}
                           </div>
                         </div>
-                        <span className="shrink-0 text-xs text-zinc-500">{timeAgo(e.sentAt)}</span>
+                        <span className="flex shrink-0 items-center gap-2 text-xs text-zinc-500">
+                          {simulateReplies && e.direction === "outbound" && <SimulateReply emailId={e.id} candidateId={c.id} />}
+                          {e.direction === "inbound" && <Badge tone="neutral">Reply</Badge>}
+                          {timeAgo(e.sentAt)}
+                        </span>
                       </div>
                       <div className="px-3 py-2 whitespace-pre-wrap text-zinc-700">{e.body}</div>
                     </div>

@@ -1,20 +1,31 @@
 /**
- * PATS background worker (ARCHITECTURE.md D5). A separate process that reuses the service layer.
- * Today it delivers scheduled reports; email sync, Graph webhooks, retention and reminders join it
- * as they're built. Run with `npm run worker` (add `-- --once` for a single pass, e.g. from cron).
+ * PATS background worker (ARCHITECTURE.md D5). A separate process that reuses the service layer:
+ * the job queue (mail sync, Graph subscription upkeep) and scheduled report delivery. Run with
+ * `npm run worker` (add `-- --once` for a single pass, e.g. from cron).
  *
- * Safe to run more than one: due work is claimed with FOR UPDATE SKIP LOCKED.
+ * Safe to run more than one: queued jobs and due schedules are claimed with FOR UPDATE SKIP LOCKED.
  */
 import { systemActor } from "@/server/policy/actor";
+import { pruneFinishedJobs, queue } from "@/server/integrations/queue";
+import { mailSyncHandlers, schedulePeriodicMailJobs } from "@/server/services/mail-sync";
 import { runDueSchedules } from "@/server/services/reports/schedules";
 
 const POLL_MS = Number(process.env.WORKER_POLL_MS ?? 60_000);
 const actor = systemActor("worker");
+const handlers = { ...mailSyncHandlers };
 let stopping = false;
+let lastPrune = 0;
 
 async function tick() {
+  await schedulePeriodicMailJobs();
+  const jobs = await queue().work(handlers);
+  if (jobs.done || jobs.retried || jobs.dead) console.log(`[worker] jobs: ${jobs.done} done, ${jobs.retried} retrying, ${jobs.dead} dead`);
   const results = await runDueSchedules(actor);
   for (const r of results) console.log(`[worker] report schedule ${r.scheduleId}: ${r.delivered} delivered, ${r.skipped} skipped, ${r.failed} failed`);
+  if (Date.now() - lastPrune > 6 * 3_600_000) {
+    await pruneFinishedJobs();
+    lastPrune = Date.now();
+  }
 }
 
 async function main() {

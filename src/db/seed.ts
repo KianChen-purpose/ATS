@@ -17,6 +17,9 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "job_queue",
+    "graph_subscriptions",
+    "mail_sync_state",
     "scim_group_members",
     "scim_groups",
     "scim_tokens",
@@ -730,6 +733,8 @@ async function main() {
         body: `Hi ${firstName},\n\nThanks for applying! I'd love to set up a quick call to chat about the ${job.title} role.\n\nBest,\n${sender.name}`,
         sentById: sender.id,
         sentAt,
+        externalThreadId: `AAQkConv-${faker.string.alphanumeric(16)}`,
+        externalMessageId: `AAMkMsg-${faker.string.alphanumeric(16)}`,
       });
       acts.push({
         candidateId: cand.id,

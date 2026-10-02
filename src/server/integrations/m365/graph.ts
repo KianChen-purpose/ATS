@@ -1,6 +1,29 @@
 import { delegatedToken } from "./delegated";
 import { recordIntegrationEvent } from "./record";
-import type { BusyBlock, M365Client } from "./types";
+import type { BusyBlock, M365Client, MailMessage } from "./types";
+
+type GraphMessage = {
+  id: string;
+  internetMessageId?: string;
+  conversationId?: string;
+  subject?: string;
+  receivedDateTime?: string;
+  from?: { emailAddress?: { address?: string } };
+  toRecipients?: { emailAddress?: { address?: string } }[];
+  body?: { content?: string };
+  "@removed"?: unknown;
+};
+const MESSAGE_SELECT = "id,internetMessageId,conversationId,subject,receivedDateTime,from,toRecipients,body";
+const toMessage = (m: GraphMessage): MailMessage => ({
+  id: m.id,
+  internetMessageId: m.internetMessageId ?? m.id,
+  conversationId: m.conversationId ?? "",
+  from: (m.from?.emailAddress?.address ?? "").toLowerCase(),
+  to: (m.toRecipients ?? []).map((r) => (r.emailAddress?.address ?? "").toLowerCase()).filter(Boolean),
+  subject: m.subject ?? "",
+  bodyText: m.body?.content ?? "",
+  receivedAt: new Date(m.receivedDateTime ?? Date.now()),
+});
 
 /**
  * Live Microsoft Graph client (ARCHITECTURE.md §8.1):
@@ -32,6 +55,16 @@ async function token() {
 }
 
 const MAX_ATTEMPTS = 4;
+
+export class GraphError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "GraphError";
+  }
+}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Graph request that honours 429/503 Retry-After with exponential backoff (ARCHITECTURE.md §8.3). */
@@ -44,7 +77,7 @@ function tokenFor(mailbox: string | "app") {
 
 async function graph<T>(path: string, init: RequestInit = {}, as: string | "app" = "app"): Promise<T> {
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(`${GRAPH}${path}`, {
+    const res = await fetch(path.startsWith("https://") ? path : `${GRAPH}${path}`, {
       ...init,
       headers: { Authorization: `Bearer ${await tokenFor(as)}`, "Content-Type": "application/json", ...init.headers },
     });
@@ -53,7 +86,7 @@ async function graph<T>(path: string, init: RequestInit = {}, as: string | "app"
       await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 30) * 1000 : 2 ** attempt * 500);
       continue;
     }
-    if (!res.ok) throw new Error(`Graph ${init.method ?? "GET"} ${path.split("/")[1]} failed: ${res.status} ${await res.text()}`);
+    if (!res.ok) throw new GraphError(res.status, `Graph ${init.method ?? "GET"} ${path.replace(GRAPH, "").split("/")[1]} failed: ${res.status} ${await res.text()}`);
     return (res.status === 202 || res.status === 204 ? undefined : await res.json()) as T;
   }
 }
@@ -100,6 +133,70 @@ export const graphM365: M365Client = {
         await graph(`/users/${encodeURIComponent(input.from)}/messages/${draft.id}/send`, { method: "POST" }, input.from);
         return { messageId: draft.id, threadId: draft.conversationId };
       }, (r) => r);
+    },
+    async getMessage(mailbox, id) {
+      try {
+        const m = await graph<GraphMessage>(`/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(id)}?$select=${MESSAGE_SELECT}`, { headers: { Prefer: 'outlook.body-content-type="text"' } }, mailbox);
+        await recordIntegrationEvent({ service: "mail", operation: "messages.get", mode: "live", ids: { messageId: id } });
+        return toMessage(m);
+      } catch (e) {
+        if (e instanceof GraphError && e.status === 404) return null;
+        await recordIntegrationEvent({ service: "mail", operation: "messages.get", mode: "live", success: false, error: e });
+        throw e;
+      }
+    },
+    delta(mailbox, deltaLink, since) {
+      return logged("mail", "messages.delta", [], async () => {
+        let url =
+          deltaLink ??
+          `/users/${encodeURIComponent(mailbox)}/mailFolders/inbox/messages/delta?$select=${MESSAGE_SELECT}&$filter=${encodeURIComponent(`receivedDateTime ge ${since.toISOString()}`)}`;
+        const messages: MailMessage[] = [];
+        for (let pages = 0; pages < 50; pages++) {
+          const page = await graph<{ value: GraphMessage[]; "@odata.nextLink"?: string; "@odata.deltaLink"?: string }>(url, { headers: { Prefer: 'outlook.body-content-type="text", odata.maxpagesize=50' } }, mailbox);
+          messages.push(...page.value.filter((m) => !m["@removed"]).map(toMessage));
+          if (page["@odata.deltaLink"]) return { messages, deltaLink: page["@odata.deltaLink"] };
+          if (!page["@odata.nextLink"]) break;
+          url = page["@odata.nextLink"];
+        }
+        return { messages, deltaLink: url };
+      });
+    },
+  },
+  subscriptions: {
+    createMail(input) {
+      return logged("mail", "subscriptions.create", [], async () => {
+        const sub = await graph<{ id: string; expirationDateTime: string }>(
+          "/subscriptions",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              changeType: "created",
+              notificationUrl: input.notificationUrl,
+              lifecycleNotificationUrl: input.lifecycleNotificationUrl,
+              resource: `users/${input.mailbox}/mailFolders('Inbox')/messages`,
+              expirationDateTime: input.expiresAt.toISOString(),
+              clientState: input.clientState,
+            }),
+          },
+          input.mailbox,
+        );
+        return { id: sub.id, expiresAt: new Date(sub.expirationDateTime) };
+      }, (r) => ({ subscriptionId: r.id }));
+    },
+    renew(mailbox, id, expiresAt) {
+      return logged("mail", "subscriptions.renew", [], async () => {
+        const sub = await graph<{ expirationDateTime: string }>(`/subscriptions/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ expirationDateTime: expiresAt.toISOString() }) }, mailbox);
+        return { expiresAt: new Date(sub.expirationDateTime) };
+      }, () => ({ subscriptionId: id }));
+    },
+    async remove(mailbox, id) {
+      await logged("mail", "subscriptions.delete", [], async () => {
+        try {
+          await graph(`/subscriptions/${encodeURIComponent(id)}`, { method: "DELETE" }, mailbox);
+        } catch (e) {
+          if (!(e instanceof GraphError && e.status === 404)) throw e;
+        }
+      }, () => ({ subscriptionId: id }));
     },
   },
   calendar: {
