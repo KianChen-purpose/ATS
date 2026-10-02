@@ -71,9 +71,9 @@ Per [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) §10, foundation hardening come
 |---|---|---|
 | 0 | Foundation: schema, demo data, app shell, ⌘K, demo auth, M365 integration layer | ✅ |
 | 1 | Core ATS: jobs, pipeline board/table, candidate profiles, notes, stage moves, archive | ✅ |
-| 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards, interviews hub | ✅ (built; being moved onto the service layer) |
-| **H** | **Foundation hardening:** service and policy layers, authorization fixes, audit (incl. view logging), immutable history, versioned migrations, demo-auth guard, consent/retention schema, tests and CI | 🚧 now |
-| 3 | Offers, approvals, headcount & openings, Word offer letters | ⏳ after H |
+| 2 | Scheduling & feedback: Outlook free/busy, self-scheduling, Teams links, scorecards, interviews hub | ✅ |
+| **H** | **Foundation hardening:** service and policy layers, authorization fixes, audit (incl. view logging), immutable history, versioned migrations, demo-auth guard, consent/retention schema, tests and CI | ✅ |
+| 3 | Offers, approval chains (jobs + offers), approvals inbox, openings, Word offer letters (EN/FR-CA) | ✅ |
 | 4 | Career sites (multi-brand, EN/FR), applications, referrals, sourcing & CRM | ⏳ |
 | 5 | Reporting: standard reports, custom builder, Excel/Power BI | ⏳ |
 | 6 | Live M365: Entra SSO/SCIM, Graph mail sync, Teams app & approvals (SSO can go live earlier, once tenant consent is ready) | ⏳ |

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarClock, ClipboardCheck, FileSignature, Video } from "lucide-react";
 import { requireActor } from "@/lib/session";
 import { getHomeData } from "@/server/services/home";
+import { approvalInbox } from "@/server/services/approval-inbox";
 import { Card, CardHeader, EmptyState } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -11,7 +12,7 @@ export const metadata = { title: "Home" };
 
 export default async function HomePage() {
   const user = await requireActor();
-  const { upcoming, feedbackDue, approvals, myJobs, stats } = await getHomeData(user);
+  const [{ upcoming, feedbackDue, myJobs, stats }, { waiting: approvals }] = await Promise.all([getHomeData(user), approvalInbox(user)]);
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
@@ -86,15 +87,20 @@ export default async function HomePage() {
 
         {approvals.length > 0 && (
           <Card>
-            <CardHeader title={<span className="flex items-center gap-2"><FileSignature size={15} className="text-zinc-400" />Offers awaiting your approval</span>} action={<Badge tone="accent">{approvals.length}</Badge>} />
+            <CardHeader
+              title={<span className="flex items-center gap-2"><FileSignature size={15} className="text-zinc-400" />Waiting for your approval</span>}
+              action={<Link href="/approvals" className="text-xs text-accent-700 hover:underline">Open approvals ({approvals.length})</Link>}
+            />
             <ul className="divide-y divide-zinc-100">
-              {approvals.map((a) => (
-                <li key={a.approvalId} className="flex items-center gap-3 px-4 py-2.5">
+              {approvals.slice(0, 6).map((a) => (
+                <li key={a.requestId} className="flex items-center gap-3 px-4 py-2.5">
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium">{a.firstName} {a.lastName}</div>
-                    <div className="truncate text-xs text-zinc-500">{a.jobTitle} · {money(a.baseSalary, a.currency)} base</div>
+                    <div className="font-medium">{a.offer ? a.offer.candidateName : a.job.title}</div>
+                    <div className="truncate text-xs text-zinc-500">
+                      {a.offer ? `Offer · ${a.job.title}${a.offer.baseSalary != null ? ` · ${money(a.offer.baseSalary, a.offer.currency)} base` : ""}` : `New job · ${a.job.brand}`}
+                    </div>
                   </div>
-                  <Link href={`/offers/${a.offerId}`} className="rounded-md border border-zinc-200 px-2 py-1 text-xs font-medium hover:bg-zinc-50">
+                  <Link href="/approvals" className="rounded-md border border-zinc-200 px-2 py-1 text-xs font-medium hover:bg-zinc-50">
                     Review
                   </Link>
                 </li>

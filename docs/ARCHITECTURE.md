@@ -118,5 +118,7 @@ The PRD's MVP (Phase 1) includes SSO/SCIM, RBAC, audit, retention and consent. T
 
 | Date | Decision | By |
 |---|---|---|
+| 2026-10-02 | **PROPOSED, pending Kian:** an approver named on an approval request may see that request's summary in the Approvals inbox and decide their step, even if they can't see the job. The summary is the job title, brand and department, the candidate's name, and the offer terms, subject to the compensation rule (§3.5). It grants no other access: the job, the candidate profile and the offers list still follow §3.1. **Why:** chains name approvers (e.g. a CFO) who are not on the hiring team. Implemented in `services/approval-inbox.ts` and `services/approval-decisions.ts`. | Claude (Phase 3), awaiting approval |
+| 2026-10-02 | **PROPOSED, pending Kian:** when no active chain applies, a job opens or an offer is approved without approval. Reopening a job that was open before doesn't need approval again. | Claude (Phase 3), awaiting approval |
 | 2026-10-01 | D11 added: UI built on `brand/tokens.css` and `brand/BRAND.md`. | Kian Chen |
 | 2026-10-01 | D1–D10 locked. Next.js full-stack TypeScript kept, with a mandatory service/policy layer, versioned migrations, and a worker plus REST API reusing the services. | Kian Chen |
