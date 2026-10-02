@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { requireActor } from "@/lib/session";
-import { getCandidateProfile, getProfileOptions } from "@/server/services/candidates";
+import { getCandidateProfile, getProfileOptions, viewCandidateProfile } from "@/server/services/candidates";
 import { CandidateProfileView } from "@/components/candidates/candidate-profile";
 
 export async function generateMetadata(props: PageProps<"/candidates/[id]">) {
@@ -16,7 +16,7 @@ export default async function CandidatePage(props: PageProps<"/candidates/[id]">
   const user = await requireActor();
   const { id } = await props.params;
   const sp = await props.searchParams;
-  const [profile, options] = await Promise.all([getCandidateProfile(user, id), getProfileOptions(user)]);
+  const [profile, options] = await Promise.all([viewCandidateProfile(user, id, "profile"), getProfileOptions(user)]);
   if (!profile) notFound();
   const selectedAppId = typeof sp.app === "string" ? sp.app : undefined;
 

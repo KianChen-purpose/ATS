@@ -15,6 +15,55 @@
       "when": 1790884520478,
       "tag": "0001_scorecard_unique_and_link_claim",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790884940638,
+      "tag": "0002_email_application_and_link_token_hash",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790885478724,
+      "tag": "0003_audit_request_context_and_append_only",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790885720391,
+      "tag": "0004_restrict_history_privacy_and_locales",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1790886439582,
+      "tag": "0005_brand_tokens_no_hardcoded_colours",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790904179818,
+      "tag": "0006_generic_approval_chains",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1790904657677,
+      "tag": "0007_job_pending_approval_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1790904980737,
+      "tag": "0008_offer_terms_and_withdrawn",
+      "breakpoints": true
     }
   ]
 }

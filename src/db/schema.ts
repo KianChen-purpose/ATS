@@ -10,6 +10,7 @@ import {
   jsonb,
   primaryKey,
   index,
+  unique,
   uniqueIndex,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -18,6 +19,15 @@ import { relations } from "drizzle-orm";
 // ---------------------------------------------------------------------------
 // Enums
 // ---------------------------------------------------------------------------
+
+/** Candidate-facing languages: English and Canadian French. */
+export const locale = pgEnum("locale", ["en", "fr-CA"]);
+
+export const consentPurpose = pgEnum("consent_purpose", ["application_processing", "talent_pool", "marketing"]);
+export const consentSource = pgEnum("consent_source", ["career_site", "recruiter", "referral", "import", "email"]);
+export const retentionRecordType = pgEnum("retention_record_type", ["candidate", "archived_application", "email", "interview_feedback"]);
+export const dsrType = pgEnum("dsr_type", ["access", "correction", "deletion"]);
+export const dsrStatus = pgEnum("dsr_status", ["received", "verifying", "in_progress", "completed", "rejected"]);
 
 export const userRole = pgEnum("user_role", [
   "admin",
@@ -28,7 +38,7 @@ export const userRole = pgEnum("user_role", [
   "executive",
 ]);
 
-export const jobStatus = pgEnum("job_status", ["draft", "open", "on_hold", "closed"]);
+export const jobStatus = pgEnum("job_status", ["draft", "pending_approval", "open", "on_hold", "closed"]);
 export const employmentType = pgEnum("employment_type", [
   "full_time",
   "part_time",
@@ -96,8 +106,13 @@ export const offerStatus = pgEnum("offer_status", [
   "sent",
   "accepted",
   "declined",
+  "withdrawn",
 ]);
-export const approvalStatus = pgEnum("approval_status", ["pending", "approved", "rejected"]);
+export const approvalSubject = pgEnum("approval_subject", ["job", "offer"]);
+export const approvalRequestStatus = pgEnum("approval_request_status", ["pending", "approved", "rejected", "cancelled"]);
+export const approvalStepStatus = pgEnum("approval_step_status", ["pending", "approved", "rejected", "skipped"]);
+/** Who approves a chain step: a named person, or a role resolved from the job when the request starts. */
+export const approverType = pgEnum("approver_type", ["user", "hiring_manager", "recruiter"]);
 export const emailDirection = pgEnum("email_direction", ["outbound", "inbound"]);
 
 // ---------------------------------------------------------------------------
@@ -109,7 +124,8 @@ export const brands = pgTable("brands", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  primaryColor: text("primary_color").notNull().default("#4f46e5"),
+  /** Optional per-brand accent for career sites, extending brand/tokens.css. Null = Purpose Black. */
+  primaryColor: text("primary_color"),
   websiteUrl: text("website_url"),
   tagline: text("tagline"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -139,7 +155,6 @@ export const users = pgTable("users", {
   entraObjectId: text("entra_object_id").unique(),
   managerId: uuid("manager_id").references((): AnyPgColumn => users.id),
   timezone: text("timezone").notNull().default("America/Toronto"),
-  avatarColor: text("avatar_color").notNull().default("#6366f1"),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -185,7 +200,7 @@ export const jobStages = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     jobId: uuid("job_id")
       .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
+      .references(() => jobs.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     type: stageType("type").notNull(),
     position: integer("position").notNull(),
@@ -199,7 +214,7 @@ export const jobHiringTeam = pgTable(
   {
     jobId: uuid("job_id")
       .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
+      .references(() => jobs.id, { onDelete: "restrict" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
@@ -212,7 +227,7 @@ export const openings = pgTable("openings", {
   id: uuid("id").primaryKey().defaultRandom(),
   jobId: uuid("job_id")
     .notNull()
-    .references(() => jobs.id, { onDelete: "cascade" }),
+    .references(() => jobs.id, { onDelete: "restrict" }),
   code: text("code").notNull().unique(),
   status: openingStatus("status").notNull().default("open"),
   reason: openingReason("reason").notNull().default("new_headcount"),
@@ -243,6 +258,12 @@ export const candidates = pgTable(
     resumeText: text("resume_text"),
     resumeFileName: text("resume_file_name"),
     ownerId: uuid("owner_id").references(() => users.id),
+    /** Language for candidate-facing email and pages (ARCHITECTURE.md §7.2). */
+    preferredLocale: locale("preferred_locale").notNull().default("en"),
+    /** IANA time zone for candidate-facing times; null = brand default (America/Toronto). */
+    timezone: text("timezone"),
+    /** Set when personal data was wiped (deletion request or retention). Row and history stay. */
+    anonymizedAt: timestamp("anonymized_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -267,10 +288,10 @@ export const applications = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     candidateId: uuid("candidate_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => candidates.id, { onDelete: "restrict" }),
     jobId: uuid("job_id")
       .notNull()
-      .references(() => jobs.id, { onDelete: "cascade" }),
+      .references(() => jobs.id, { onDelete: "restrict" }),
     stageId: uuid("stage_id")
       .notNull()
       .references(() => jobStages.id),
@@ -298,7 +319,7 @@ export const applicationStageEvents = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     applicationId: uuid("application_id")
       .notNull()
-      .references(() => applications.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "restrict" }),
     fromStageId: uuid("from_stage_id").references(() => jobStages.id),
     toStageId: uuid("to_stage_id").references(() => jobStages.id),
     /** Status after this event, so archive/hire transitions are captured too. */
@@ -316,10 +337,8 @@ export const activities = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     candidateId: uuid("candidate_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
-    applicationId: uuid("application_id").references(() => applications.id, {
-      onDelete: "cascade",
-    }),
+      .references(() => candidates.id, { onDelete: "restrict" }),
+    applicationId: uuid("application_id").references(() => applications.id, { onDelete: "restrict" }),
     type: activityType("type").notNull(),
     actorId: uuid("actor_id").references(() => users.id),
     body: text("body"),
@@ -349,7 +368,7 @@ export const interviews = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     applicationId: uuid("application_id")
       .notNull()
-      .references(() => applications.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "restrict" }),
     stageId: uuid("stage_id").references(() => jobStages.id),
     feedbackFormId: uuid("feedback_form_id").references(() => feedbackForms.id),
     title: text("title").notNull(),
@@ -371,7 +390,7 @@ export const interviewInterviewers = pgTable(
   {
     interviewId: uuid("interview_id")
       .notNull()
-      .references(() => interviews.id, { onDelete: "cascade" }),
+      .references(() => interviews.id, { onDelete: "restrict" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id),
@@ -385,7 +404,7 @@ export const scorecards = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     applicationId: uuid("application_id")
       .notNull()
-      .references(() => applications.id, { onDelete: "cascade" }),
+      .references(() => applications.id, { onDelete: "restrict" }),
     interviewId: uuid("interview_id").references(() => interviews.id, { onDelete: "set null" }),
     authorId: uuid("author_id")
       .notNull()
@@ -405,10 +424,11 @@ export const scorecards = pgTable(
 /** Candidate self-scheduling: a tokenized link that lets the candidate pick a slot. */
 export const schedulingLinks = pgTable("scheduling_links", {
   id: uuid("id").primaryKey().defaultRandom(),
-  token: text("token").notNull().unique(),
+  /** SHA-256 of the link token. The token itself is only ever in the candidate's URL. */
+  tokenHash: text("token_hash").notNull().unique(),
   applicationId: uuid("application_id")
     .notNull()
-    .references(() => applications.id, { onDelete: "cascade" }),
+    .references(() => applications.id, { onDelete: "restrict" }),
   stageId: uuid("stage_id").references(() => jobStages.id),
   interviewerIds: uuid("interviewer_ids").array().notNull(),
   durationMinutes: integer("duration_minutes").notNull().default(45),
@@ -430,11 +450,16 @@ export const offers = pgTable("offers", {
   id: uuid("id").primaryKey().defaultRandom(),
   applicationId: uuid("application_id")
     .notNull()
-    .references(() => applications.id, { onDelete: "cascade" }),
+    .references(() => applications.id, { onDelete: "restrict" }),
   openingId: uuid("opening_id").references(() => openings.id),
   status: offerStatus("status").notNull().default("draft"),
+  /** Whole dollars (ARCHITECTURE.md §7.6). */
   baseSalary: integer("base_salary").notNull(),
   bonusPercent: integer("bonus_percent"),
+  /** Whole dollars. */
+  signOnBonus: integer("sign_on_bonus"),
+  /** Equity / LTIP terms as written in the letter. */
+  equity: text("equity"),
   currency: text("currency").notNull().default("CAD"),
   startDate: date("start_date"),
   notes: text("notes"),
@@ -442,20 +467,8 @@ export const offers = pgTable("offers", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
-});
-
-export const offerApprovals = pgTable("offer_approvals", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  offerId: uuid("offer_id")
-    .notNull()
-    .references(() => offers.id, { onDelete: "cascade" }),
-  approverId: uuid("approver_id")
-    .notNull()
-    .references(() => users.id),
-  position: integer("position").notNull(),
-  status: approvalStatus("status").notNull().default("pending"),
-  comment: text("comment"),
-  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  declineReason: text("decline_reason"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ---------------------------------------------------------------------------
@@ -468,7 +481,11 @@ export const emailTemplates = pgTable("email_templates", {
   subject: text("subject").notNull(),
   /** Supports {{candidate.firstName}}, {{job.title}}, {{brand.name}}, {{sender.name}} merge fields. */
   body: text("body").notNull(),
+  /** Null = available to every brand. */
   brandId: uuid("brand_id").references(() => brands.id),
+  locale: locale("locale").notNull().default("en"),
+  /** Groups the EN and FR-CA versions of the same template. */
+  templateKey: text("template_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -478,7 +495,9 @@ export const emails = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     candidateId: uuid("candidate_id")
       .notNull()
-      .references(() => candidates.id, { onDelete: "cascade" }),
+      .references(() => candidates.id, { onDelete: "restrict" }),
+    /** Job context for visibility (ARCHITECTURE.md §3.7). Null = candidate-level email, broad roles only. */
+    applicationId: uuid("application_id").references(() => applications.id),
     direction: emailDirection("direction").notNull(),
     fromAddress: text("from_address").notNull(),
     toAddress: text("to_address").notNull(),
@@ -490,7 +509,7 @@ export const emails = pgTable(
     externalMessageId: text("external_message_id"),
     sentAt: timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("emails_candidate_idx").on(t.candidateId)],
+  (t) => [index("emails_candidate_idx").on(t.candidateId), index("emails_application_idx").on(t.applicationId)],
 );
 
 // ---------------------------------------------------------------------------
@@ -506,9 +525,13 @@ export const auditLogs = pgTable(
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    /** Request correlation (ARCHITECTURE.md §4.2). Null for system actors. */
+    requestId: text("request_id"),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("audit_entity_idx").on(t.entityType, t.entityId)],
+  (t) => [index("audit_entity_idx").on(t.entityType, t.entityId), index("audit_actor_idx").on(t.actorId, t.createdAt)],
 );
 
 /** Every call PATS makes to Microsoft 365 (real or mocked), so the demo can show integration traffic. */
@@ -531,6 +554,165 @@ export const integrationEvents = pgTable("integration_events", {
 
 export const brandsRelations = relations(brands, ({ many }) => ({ jobs: many(jobs) }));
 
+// ---------------------------------------------------------------------------
+// Approvals (ARCHITECTURE.md §7.4): one generic model for job/requisition and offer approvals
+// ---------------------------------------------------------------------------
+
+/**
+ * A configured approval chain. The most specific active chain wins: brand over all-brands,
+ * department over all-departments, then the highest `minAmount` at or below the request amount.
+ */
+export const approvalChains = pgTable(
+  "approval_chains",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    subject: approvalSubject("subject").notNull(),
+    /** Null = applies to every brand. */
+    brandId: uuid("brand_id").references(() => brands.id),
+    /** Null = applies to every department. */
+    departmentId: uuid("department_id").references(() => departments.id),
+    /** Offers: applies when base salary ≥ this (whole dollars). Null = any amount. */
+    minAmount: integer("min_amount"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("approval_chains_subject_idx").on(t.subject, t.active)],
+);
+
+export const approvalChainSteps = pgTable(
+  "approval_chain_steps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chainId: uuid("chain_id")
+      .notNull()
+      .references(() => approvalChains.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    approverType: approverType("approver_type").notNull(),
+    /** Required when approverType = "user". */
+    approverId: uuid("approver_id").references(() => users.id),
+  },
+  (t) => [uniqueIndex("approval_chain_steps_pos_uq").on(t.chainId, t.position)],
+);
+
+/** One approval run for a job or an offer. Steps are resolved and frozen when it starts. */
+export const approvalRequests = pgTable(
+  "approval_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subject: approvalSubject("subject").notNull(),
+    /** jobs.id or offers.id, depending on `subject`. */
+    subjectId: uuid("subject_id").notNull(),
+    /** Job context for visibility (ARCHITECTURE.md §3.7). */
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+    chainId: uuid("chain_id").references(() => approvalChains.id),
+    status: approvalRequestStatus("status").notNull().default("pending"),
+    requestedById: uuid("requested_by_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [index("approval_requests_subject_idx").on(t.subject, t.subjectId), index("approval_requests_job_idx").on(t.jobId)],
+);
+
+export const approvalSteps = pgTable(
+  "approval_steps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => approvalRequests.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    approverId: uuid("approver_id")
+      .notNull()
+      .references(() => users.id),
+    status: approvalStepStatus("status").notNull().default("pending"),
+    comment: text("comment"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("approval_steps_pos_uq").on(t.requestId, t.position), index("approval_steps_approver_idx").on(t.approverId, t.status)],
+);
+
+// ---------------------------------------------------------------------------
+// Localization
+// ---------------------------------------------------------------------------
+
+/** Translated job posting text. The base `jobs` row holds the EN version. */
+export const jobTranslations = pgTable(
+  "job_translations",
+  {
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+    locale: locale("locale").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.jobId, t.locale] })],
+);
+
+// ---------------------------------------------------------------------------
+// Privacy & compliance (ARCHITECTURE.md §5): PIPEDA, Quebec Law 25, CASL
+// ---------------------------------------------------------------------------
+
+/** Every grant or withdrawal of consent. Append-only; the latest row per purpose wins. */
+export const consentRecords = pgTable(
+  "consent_records",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => candidates.id, { onDelete: "restrict" }),
+    purpose: consentPurpose("purpose").notNull(),
+    granted: boolean("granted").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    locale: locale("locale").notNull().default("en"),
+    source: consentSource("source").notNull(),
+    recordedById: uuid("recorded_by_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (t) => [index("consent_candidate_idx").on(t.candidateId, t.purpose, t.createdAt)],
+);
+
+/** How long each kind of record is kept, per brand (null brand = default for all brands). */
+export const retentionPolicies = pgTable(
+  "retention_policies",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    brandId: uuid("brand_id").references(() => brands.id),
+    recordType: retentionRecordType("record_type").notNull(),
+    retentionDays: integer("retention_days").notNull(),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [unique("retention_brand_type_uq").on(t.brandId, t.recordType).nullsNotDistinct()],
+);
+
+/** Access, correction and deletion requests, tracked against their legal deadline. */
+export const dataSubjectRequests = pgTable(
+  "data_subject_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    candidateId: uuid("candidate_id").references(() => candidates.id, { onDelete: "restrict" }),
+    requesterEmail: text("requester_email").notNull(),
+    type: dsrType("type").notNull(),
+    status: dsrStatus("status").notNull().default("received"),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+    /** 30 days under PIPEDA and Law 25. */
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    handledById: uuid("handled_by_id").references(() => users.id),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("dsr_status_idx").on(t.status, t.dueAt)],
+);
+
 export const usersRelations = relations(users, ({ one }) => ({
   manager: one(users, { fields: [users.managerId], references: [users.id] }),
 }));
@@ -544,6 +726,7 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
   coordinator: one(users, { fields: [jobs.coordinatorId], references: [users.id], relationName: "jobCoordinator" }),
   stages: many(jobStages),
   openings: many(openings),
+  translations: many(jobTranslations),
   team: many(jobHiringTeam),
   applications: many(applications),
 }));
@@ -566,6 +749,15 @@ export const candidatesRelations = relations(candidates, ({ one, many }) => ({
   applications: many(applications),
   activities: many(activities),
   emails: many(emails),
+  consents: many(consentRecords),
+}));
+
+export const consentRecordsRelations = relations(consentRecords, ({ one }) => ({
+  candidate: one(candidates, { fields: [consentRecords.candidateId], references: [candidates.id] }),
+}));
+
+export const jobTranslationsRelations = relations(jobTranslations, ({ one }) => ({
+  job: one(jobs, { fields: [jobTranslations.jobId], references: [jobs.id] }),
 }));
 
 export const applicationsRelations = relations(applications, ({ one, many }) => ({
@@ -611,20 +803,38 @@ export const scorecardsRelations = relations(scorecards, ({ one }) => ({
   author: one(users, { fields: [scorecards.authorId], references: [users.id] }),
 }));
 
-export const offersRelations = relations(offers, ({ one, many }) => ({
+export const offersRelations = relations(offers, ({ one }) => ({
   application: one(applications, { fields: [offers.applicationId], references: [applications.id] }),
   opening: one(openings, { fields: [offers.openingId], references: [openings.id] }),
   createdBy: one(users, { fields: [offers.createdById], references: [users.id] }),
-  approvals: many(offerApprovals),
 }));
 
-export const offerApprovalsRelations = relations(offerApprovals, ({ one }) => ({
-  offer: one(offers, { fields: [offerApprovals.offerId], references: [offers.id] }),
-  approver: one(users, { fields: [offerApprovals.approverId], references: [users.id] }),
+export const approvalChainsRelations = relations(approvalChains, ({ one, many }) => ({
+  brand: one(brands, { fields: [approvalChains.brandId], references: [brands.id] }),
+  department: one(departments, { fields: [approvalChains.departmentId], references: [departments.id] }),
+  steps: many(approvalChainSteps),
+}));
+
+export const approvalChainStepsRelations = relations(approvalChainSteps, ({ one }) => ({
+  chain: one(approvalChains, { fields: [approvalChainSteps.chainId], references: [approvalChains.id] }),
+  approver: one(users, { fields: [approvalChainSteps.approverId], references: [users.id] }),
+}));
+
+export const approvalRequestsRelations = relations(approvalRequests, ({ one, many }) => ({
+  job: one(jobs, { fields: [approvalRequests.jobId], references: [jobs.id] }),
+  chain: one(approvalChains, { fields: [approvalRequests.chainId], references: [approvalChains.id] }),
+  requestedBy: one(users, { fields: [approvalRequests.requestedById], references: [users.id] }),
+  steps: many(approvalSteps),
+}));
+
+export const approvalStepsRelations = relations(approvalSteps, ({ one }) => ({
+  request: one(approvalRequests, { fields: [approvalSteps.requestId], references: [approvalRequests.id] }),
+  approver: one(users, { fields: [approvalSteps.approverId], references: [users.id] }),
 }));
 
 export const emailsRelations = relations(emails, ({ one }) => ({
   candidate: one(candidates, { fields: [emails.candidateId], references: [candidates.id] }),
+  application: one(applications, { fields: [emails.applicationId], references: [applications.id] }),
   sentBy: one(users, { fields: [emails.sentById], references: [users.id] }),
 }));
 

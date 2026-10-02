@@ -63,7 +63,7 @@ export default async function FeedbackPage(props: PageProps<"/interviews/[id]/fe
             ))}
           </ul>
           {iv.meetingUrl && (
-            <a href={iv.meetingUrl} target="_blank" className="mt-3 inline-flex items-center gap-1 rounded-md bg-[#5b5fc7] px-2 py-1 text-xs font-medium text-white">
+            <a href={iv.meetingUrl} target="_blank" className="mt-3 inline-flex items-center gap-1 rounded-md bg-teams px-2 py-1 text-xs font-medium text-white">
               <Video size={12} /> Teams meeting
             </a>
           )}

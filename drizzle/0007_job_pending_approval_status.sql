@@ -1,0 +1,1 @@
+ALTER TYPE "public"."job_status" ADD VALUE 'pending_approval' BEFORE 'open';

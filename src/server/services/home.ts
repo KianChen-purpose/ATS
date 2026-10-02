@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, count, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import { db, schema as s } from "@/db";
 
-import type { UserActor } from "@/server/policy";
+import { visibleJobIds, visibleJobsFilter, type UserActor } from "@/server/policy";
 
 export async function getHomeData(actor: UserActor) {
   const userId = actor.id;
@@ -63,7 +63,8 @@ export async function getHomeData(actor: UserActor) {
     // Offer approvals waiting on me (all earlier approvers have approved)
     db
       .select({
-        approvalId: s.offerApprovals.id,
+        approvalId: s.approvalSteps.id,
+        requestId: s.approvalRequests.id,
         offerId: s.offers.id,
         baseSalary: s.offers.baseSalary,
         currency: s.offers.currency,
@@ -73,17 +74,18 @@ export async function getHomeData(actor: UserActor) {
         lastName: s.candidates.lastName,
         jobTitle: s.jobs.title,
       })
-      .from(s.offerApprovals)
-      .innerJoin(s.offers, eq(s.offers.id, s.offerApprovals.offerId))
+      .from(s.approvalSteps)
+      .innerJoin(s.approvalRequests, eq(s.approvalRequests.id, s.approvalSteps.requestId))
+      .innerJoin(s.offers, and(eq(s.approvalRequests.subject, "offer"), eq(s.offers.id, s.approvalRequests.subjectId)))
       .innerJoin(s.applications, eq(s.applications.id, s.offers.applicationId))
       .innerJoin(s.candidates, eq(s.candidates.id, s.applications.candidateId))
       .innerJoin(s.jobs, eq(s.jobs.id, s.applications.jobId))
       .where(
         and(
-          eq(s.offerApprovals.approverId, userId),
-          eq(s.offerApprovals.status, "pending"),
-          eq(s.offers.status, "pending_approval"),
-          sql`NOT EXISTS (SELECT 1 FROM offer_approvals oa WHERE oa.offer_id = ${s.offers.id} AND oa.position < ${s.offerApprovals.position} AND oa.status <> 'approved')`,
+          eq(s.approvalSteps.approverId, userId),
+          eq(s.approvalSteps.status, "pending"),
+          eq(s.approvalRequests.status, "pending"),
+          sql`NOT EXISTS (SELECT 1 FROM approval_steps p WHERE p.request_id = ${s.approvalSteps.requestId} AND p.position < ${s.approvalSteps.position} AND p.status <> 'approved')`,
         ),
       ),
 
@@ -108,13 +110,29 @@ export async function getHomeData(actor: UserActor) {
       .orderBy(asc(s.jobs.title)),
 
     Promise.all([
-      db.select({ n: count() }).from(s.jobs).where(eq(s.jobs.status, "open")),
-      db.select({ n: count() }).from(s.applications).where(eq(s.applications.status, "active")),
+      // Headline counts only include jobs the viewer can see.
+      db.select({ n: count() }).from(s.jobs).where(and(eq(s.jobs.status, "open"), visibleJobsFilter(actor))),
+      db
+        .select({ n: count() })
+        .from(s.applications)
+        .where(and(eq(s.applications.status, "active"), inArray(s.applications.jobId, visibleJobIds(actor)))),
       db
         .select({ n: count() })
         .from(s.interviews)
-        .where(and(gte(s.interviews.startAt, now), lt(s.interviews.startAt, weekAhead), eq(s.interviews.status, "scheduled"))),
-      db.select({ n: count() }).from(s.offers).where(inArray(s.offers.status, ["pending_approval", "approved", "sent"])),
+        .innerJoin(s.applications, eq(s.applications.id, s.interviews.applicationId))
+        .where(
+          and(
+            gte(s.interviews.startAt, now),
+            lt(s.interviews.startAt, weekAhead),
+            eq(s.interviews.status, "scheduled"),
+            inArray(s.applications.jobId, visibleJobIds(actor)),
+          ),
+        ),
+      db
+        .select({ n: count() })
+        .from(s.offers)
+        .innerJoin(s.applications, eq(s.applications.id, s.offers.applicationId))
+        .where(and(inArray(s.offers.status, ["pending_approval", "approved", "sent"]), inArray(s.applications.jobId, visibleJobIds(actor)))),
     ]).then(([a, b, c, d]) => ({ openJobs: a[0].n, activeCandidates: b[0].n, interviewsThisWeek: c[0].n, openOffers: d[0].n })),
   ]);
 

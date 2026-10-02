@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { Link2, Mail, MapPin, Phone, Lock, FileText, Video, EyeOff } from "lucide-react";
-import { Avatar, candidateColor } from "@/components/ui/avatar";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
-import { cn, daysSince, fmt, money, RECOMMENDATION_LABELS, timeAgo } from "@/lib/utils";
+import { cn, daysSince, fmt, RECOMMENDATION_LABELS, timeAgo } from "@/lib/utils";
 import type { CandidateProfile } from "@/server/services/candidates";
 import type { UserActor } from "@/server/policy";
 import { canManageRecruiting } from "@/server/policy";
@@ -15,6 +15,8 @@ import { AddToJob } from "./add-to-job";
 import { ActivityFeed, PersonChip } from "./activity-feed";
 import { InterviewRowActions } from "./interview-row-actions";
 import { DebriefMatrix } from "./debrief-matrix";
+import { OfferCard } from "@/components/offers/offer-card";
+import { OfferForm } from "@/components/offers/offer-form";
 
 type Options = {
   archiveReasons: { id: string; name: string; category: string }[];
@@ -47,7 +49,9 @@ export function CandidateProfileView({
   const jobTitles = Object.fromEntries(c.applications.map((a) => [a.id, a.job.title]));
   const allScorecards = c.applications.flatMap((a) => a.scorecards.map((sc) => ({ ...sc, jobTitle: a.job.title })));
   const allInterviews = c.applications.flatMap((a) => a.interviews.map((iv) => ({ ...iv, jobTitle: a.job.title, scorecards: a.scorecards.filter((sc) => sc.interviewId === iv.id) })));
-  const offers = c.applications.flatMap((a) => a.offers.map((o) => ({ ...o, jobTitle: a.job.title })));
+  const offers = c.applications.flatMap((a) =>
+    a.offers.map((o) => ({ ...o, jobTitle: a.job.title, band: { min: a.job.compMin, max: a.job.compMax, currency: a.job.currency }, openings: a.job.openings })),
+  );
   const hiddenFeedback = c.applications.reduce((n, a) => n + a.feedbackHidden, 0);
   const now = new Date();
 
@@ -56,7 +60,7 @@ export function CandidateProfileView({
       {/* Header */}
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-start gap-3">
-          <Avatar name={name} color={candidateColor(c.firstName + c.lastName)} size={44} />
+          <Avatar name={name} size={44} />
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-semibold text-zinc-900">{name}</h1>
             <div className="text-zinc-600">{[c.currentTitle, c.currentCompany].filter(Boolean).join(" at ")}</div>
@@ -162,7 +166,7 @@ export function CandidateProfileView({
                   allScorecards.map((sc) => (
                     <div key={sc.id} className="rounded-lg border border-zinc-200 p-3">
                       <div className="flex items-center justify-between">
-                        <PersonChip name={sc.author.name} color={sc.author.avatarColor} />
+                        <PersonChip name={sc.author.name} />
                         <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${RECOMMENDATION_LABELS[sc.overall].className}`}>
                           {RECOMMENDATION_LABELS[sc.overall].label}
                         </span>
@@ -208,7 +212,7 @@ export function CandidateProfileView({
                         </div>
                         {iv.status === "scheduled" && iv.startAt > now ? (
                           iv.meetingUrl && (
-                            <a href={iv.meetingUrl} target="_blank" className="inline-flex items-center gap-1 rounded-md bg-[#5b5fc7] px-2 py-1 text-xs font-medium text-white">
+                            <a href={iv.meetingUrl} target="_blank" className="inline-flex items-center gap-1 rounded-md bg-teams px-2 py-1 text-xs font-medium text-white">
                               <Video size={12} /> Teams
                             </a>
                           )
@@ -290,28 +294,35 @@ export function CandidateProfileView({
                   count: offers.length,
                   content: (
                     <div className="space-y-3 px-5 py-4">
+                      {canManage &&
+                        c.applications
+                          .filter((a) => a.status === "active" && !a.offers.some((o) => ["draft", "pending_approval", "approved", "sent"].includes(o.status)))
+                          .map((a) => (
+                            <div key={a.id} className="flex items-center justify-between rounded-lg border border-dashed border-zinc-300 px-4 py-2.5">
+                              <span className="text-zinc-600">No offer in progress for <span className="font-medium text-zinc-900">{a.job.title}</span></span>
+                              <OfferForm
+                                applicationId={a.id}
+                                label="Create offer"
+                                jobTitle={a.job.title}
+                                band={{ min: a.job.compMin, max: a.job.compMax, currency: a.job.currency }}
+                                openings={a.job.openings.filter((op) => op.status === "open")}
+                              />
+                            </div>
+                          ))}
                       {offers.length === 0 ? (
-                        <EmptyState title="No offers" />
+                        <EmptyState title="No offers yet" />
                       ) : (
                         offers.map((o) => (
-                          <div key={o.id} className="rounded-lg border border-zinc-200 p-3">
-                            <div className="flex items-center justify-between">
-                              <div className="font-medium">{o.jobTitle}</div>
-                              <Badge tone={o.status === "accepted" ? "green" : o.status === "declined" ? "red" : "accent"}>{o.status.replace("_", " ")}</Badge>
-                            </div>
-                            <div className="mt-1 text-zinc-700">
-                              {money(o.baseSalary, o.currency)} base{o.bonusPercent ? ` + ${o.bonusPercent}% bonus` : ""}
-                              {o.startDate && <> · Start {fmt(o.startDate + "T12:00:00Z", "MMM d, yyyy")}</>}
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                              {o.approvals.map((ap) => (
-                                <span key={ap.id} className="inline-flex items-center gap-1 rounded bg-zinc-50 px-1.5 py-0.5">
-                                  {ap.approver.name}:
-                                  <span className={ap.status === "approved" ? "text-emerald-700" : ap.status === "rejected" ? "text-red-700" : "text-amber-700"}>{ap.status}</span>
-                                </span>
-                              ))}
-                            </div>
-                          </div>
+                          <OfferCard
+                            key={o.id}
+                            offer={o}
+                            jobTitle={o.jobTitle}
+                            band={o.band}
+                            openings={o.openings}
+                            canManage={canManage}
+                            viewerId={user.id}
+                            timezone={user.timezone}
+                          />
                         ))
                       )}
                     </div>

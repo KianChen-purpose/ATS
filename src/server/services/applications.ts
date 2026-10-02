@@ -4,7 +4,8 @@ import { z } from "zod";
 import { db, schema as s } from "@/db";
 import { renderTemplate } from "@/lib/templates";
 import { m365 } from "@/server/integrations/m365";
-import { assertCanSeeJobs, NotFoundError, requireRecruiting, requireUserActor, type Actor } from "@/server/policy";
+import { assertCanSeeJobs, NotFoundError, requireRecruiting, requireUserActor, type Actor, type UserActor } from "@/server/policy";
+import type { Tx } from "./tx";
 import { recordAudit } from "./audit";
 import { assertCanSeeCandidate } from "./candidates";
 import { sendAndLogEmail } from "./email";
@@ -27,6 +28,41 @@ async function loadVisibleApplications(actor: Actor, applicationIds: string[]) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * Move one application to a stage inside the caller's transaction: exactly one stage event,
+ * a timeline entry and an audit row. Moving to a "hired" stage marks it hired. No-op if nothing changes.
+ * Internal: callers authorize first.
+ */
+export async function applyStageMove(
+  tx: Tx,
+  actor: UserActor,
+  app: { id: string; candidateId: string; stageId: string; status: string; stage: { name: string } },
+  stage: { id: string; name: string; type: string },
+  now = new Date(),
+) {
+  const status = stage.type === "hired" ? "hired" : "active";
+  if (app.stageId === stage.id && app.status === status) return false;
+  await tx
+    .update(s.applications)
+    .set({ stageId: stage.id, status, stageEnteredAt: now, archivedAt: null, archiveReasonId: null, hiredAt: status === "hired" ? now : null })
+    .where(eq(s.applications.id, app.id));
+  await tx.insert(s.applicationStageEvents).values({ applicationId: app.id, fromStageId: app.stageId, toStageId: stage.id, status, movedById: actor.id });
+  await tx.insert(s.activities).values({
+    candidateId: app.candidateId,
+    applicationId: app.id,
+    type: status === "hired" ? "hired" : "stage_change",
+    actorId: actor.id,
+    body: status === "hired" ? "Marked as hired 🎉" : `Moved from ${app.stage.name} to ${stage.name}`,
+    metadata: { fromStage: app.stage.name, toStage: stage.name },
+  });
+  await tx.update(s.candidates).set({ updatedAt: now }).where(eq(s.candidates.id, app.candidateId));
+  await recordAudit(tx, actor, status === "hired" ? "application.hired" : "application.stage_changed", "application", app.id, {
+    fromStageId: app.stageId,
+    toStageId: stage.id,
+  });
+  return true;
+}
+
 export const moveToStageSchema = z.object({
   applicationIds: z.array(z.string().uuid()).min(1).max(500),
   stageId: z.string().uuid(),
@@ -41,29 +77,8 @@ export async function moveToStage(actor: Actor, d: z.output<typeof moveToStageSc
   if (apps.some((a) => a.jobId !== stage.jobId)) throw new Error("All applications must be on the stage's job.");
 
   const now = new Date();
-  const status = stage.type === "hired" ? "hired" : "active";
   await db.transaction(async (tx) => {
-    for (const app of apps) {
-      if (app.stageId === stage.id && app.status === status) continue;
-      await tx
-        .update(s.applications)
-        .set({ stageId: stage.id, status, stageEnteredAt: now, archivedAt: null, archiveReasonId: null, hiredAt: status === "hired" ? now : null })
-        .where(eq(s.applications.id, app.id));
-      await tx.insert(s.applicationStageEvents).values({ applicationId: app.id, fromStageId: app.stageId, toStageId: stage.id, status, movedById: user.id });
-      await tx.insert(s.activities).values({
-        candidateId: app.candidateId,
-        applicationId: app.id,
-        type: status === "hired" ? "hired" : "stage_change",
-        actorId: user.id,
-        body: status === "hired" ? "Marked as hired 🎉" : `Moved from ${app.stage.name} to ${stage.name}`,
-        metadata: { fromStage: app.stage.name, toStage: stage.name },
-      });
-      await tx.update(s.candidates).set({ updatedAt: now }).where(eq(s.candidates.id, app.candidateId));
-      await recordAudit(tx, actor, status === "hired" ? "application.hired" : "application.stage_changed", "application", app.id, {
-        fromStageId: app.stageId,
-        toStageId: stage.id,
-      });
-    }
+    for (const app of apps) await applyStageMove(tx, user, app, stage, now);
   });
   return { jobId: stage.jobId, candidateIds: apps.map((a) => a.candidateId) };
 }

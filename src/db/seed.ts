@@ -17,12 +17,19 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "approval_steps",
+    "approval_requests",
+    "approval_chain_steps",
+    "approval_chains",
+    "data_subject_requests",
+    "consent_records",
+    "retention_policies",
+    "job_translations",
     "integration_events",
     "scheduling_links",
     "audit_logs",
     "emails",
     "email_templates",
-    "offer_approvals",
     "offers",
     "scorecards",
     "interview_interviewers",
@@ -47,12 +54,12 @@ async function reset() {
 }
 
 const BRANDS = [
-  { name: "Purpose Investments", slug: "purpose-investments", primaryColor: "#0f4c81", tagline: "Investing in a better future" },
-  { name: "Purpose Advisor Solutions", slug: "purpose-advisor-solutions", primaryColor: "#2563eb", tagline: "Built for independent advisors" },
-  { name: "Steadyhand", slug: "steadyhand", primaryColor: "#0d9488", tagline: "Investing made simple" },
-  { name: "Harness Investment Management", slug: "harness", primaryColor: "#7c3aed", tagline: "Disciplined, data-driven investing" },
-  { name: "Driven", slug: "driven", primaryColor: "#ea580c", tagline: "Wealth for the next generation" },
-  { name: "Foundation Wealth Partners", slug: "foundation-wealth", primaryColor: "#b45309", tagline: "Partners in your wealth" },
+  { name: "Purpose Investments", slug: "purpose-investments", tagline: "Investing in a better future" },
+  { name: "Purpose Advisor Solutions", slug: "purpose-advisor-solutions", tagline: "Built for independent advisors" },
+  { name: "Steadyhand", slug: "steadyhand", tagline: "Investing made simple" },
+  { name: "Harness Investment Management", slug: "harness", tagline: "Disciplined, data-driven investing" },
+  { name: "Driven", slug: "driven", tagline: "Wealth for the next generation" },
+  { name: "Foundation Wealth Partners", slug: "foundation-wealth", tagline: "Partners in your wealth" },
 ];
 
 const DEPARTMENTS = [
@@ -101,7 +108,6 @@ const USERS: { name: string; title: string; role: (typeof s.userRole.enumValues)
   { name: "James Carter", title: "CFO", role: "executive" },
 ];
 
-const AVATAR_COLORS = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
 const STAGE_TEMPLATE: { name: string; type: (typeof s.stageType.enumValues)[number] }[] = [
   { name: "Lead", type: "lead" },
@@ -205,10 +211,9 @@ async function main() {
   const users = await db
     .insert(s.users)
     .values(
-      USERS.map((u, i) => ({
+      USERS.map((u) => ({
         ...u,
         email: `${u.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]+/g, ".")}@purpose.demo`,
-        avatarColor: AVATAR_COLORS[i % AVATAR_COLORS.length],
       })),
     )
     .returning();
@@ -234,27 +239,52 @@ async function main() {
     ])
     .returning();
 
+  await db.insert(s.retentionPolicies).values(DEMO_RETENTION);
   await db.insert(s.emailTemplates).values([
+    ...FR_TEMPLATES,
     {
+      templateKey: "screen_invite",
       name: "Recruiter screen invite",
       subject: "{{brand.name}} – let's chat about the {{job.title}} role",
       body: "Hi {{candidate.firstName}},\n\nThanks for your interest in the {{job.title}} role at {{brand.name}}. I'd love to set up a 30-minute call to learn more about you.\n\nBest,\n{{sender.name}}",
     },
     {
+      templateKey: "rejection_review",
       name: "Rejection – after application review",
       subject: "Your application to {{brand.name}}",
       body: "Hi {{candidate.firstName}},\n\nThank you for applying for the {{job.title}} role. After careful review we've decided to move forward with other candidates. We'll keep your profile on file for future roles.\n\nAll the best,\n{{sender.name}}",
     },
     {
+      templateKey: "outreach_sourced",
       name: "Outreach – sourced candidate",
       subject: "{{job.title}} at {{brand.name}}",
       body: "Hi {{candidate.firstName}},\n\nYour background caught my eye. We're hiring a {{job.title}} at {{brand.name}} and I think you'd be a great fit. Open to a quick chat?\n\n{{sender.name}}",
     },
   ]);
 
+  console.log("Creating approval chains…");
+  const chain = async (name: string, subject: "job" | "offer", minAmount: number | null, steps: { approverType: "user" | "hiring_manager"; approverId?: string }[]) => {
+    const [row] = await db.insert(s.approvalChains).values({ name, subject, minAmount }).returning();
+    await db.insert(s.approvalChainSteps).values(steps.map((st, position) => ({ chainId: row.id, position, approverType: st.approverType, approverId: st.approverId ?? null })));
+    return {
+      id: row.id,
+      approvers: (hiringManagerId: string) =>
+        steps.map((st) => (st.approverType === "hiring_manager" ? hiringManagerId : st.approverId!)).filter((id, i, all) => id !== all[i - 1]),
+    };
+  };
+  const cfo = userByName["James Carter"].id;
+  const cpo = userByName["Olivia Bennett"].id;
+  await chain("New jobs – all brands", "job", null, [{ approverType: "hiring_manager" }, { approverType: "user", approverId: cpo }]);
+  const offerChain = await chain("Offers – all brands", "offer", null, [{ approverType: "hiring_manager" }, { approverType: "user", approverId: cfo }]);
+  const seniorOfferChain = await chain("Offers $200k+ – all brands", "offer", 200_000, [
+    { approverType: "hiring_manager" },
+    { approverType: "user", approverId: cpo },
+    { approverType: "user", approverId: cfo },
+  ]);
+
   console.log("Creating jobs…");
   let openingSeq = 1000;
-  const jobRows: { job: typeof s.jobs.$inferSelect; stages: (typeof s.jobStages.$inferSelect)[]; dept: string }[] = [];
+  const jobRows: { job: typeof s.jobs.$inferSelect; stages: (typeof s.jobStages.$inferSelect)[]; dept: string; team: typeof users }[] = [];
   for (const j of JOBS) {
     const status = j.status ?? "open";
     const openedDaysAgo = faker.number.int({ min: 20, max: 140 });
@@ -293,7 +323,15 @@ async function main() {
     );
     const team = faker.helpers.arrayElements(interviewers.filter((u) => u.id !== job.hiringManagerId), 3);
     await db.insert(s.jobHiringTeam).values(team.map((u) => ({ jobId: job.id, userId: u.id })));
-    jobRows.push({ job, stages, dept: j.dept });
+    jobRows.push({ job, stages, dept: j.dept, team });
+    if (job.publishedOnCareerSite) {
+      await db.insert(s.jobTranslations).values({
+        jobId: job.id,
+        locale: "fr-CA",
+        title: job.title,
+        description: jobDescriptionFr(job.title, BRANDS.find((b) => b.slug === j.brand)!.name),
+      });
+    }
   }
 
   console.log("Creating candidates & applications…");
@@ -302,7 +340,7 @@ async function main() {
   const reachWeights = [6, 34, 22, 15, 9, 7, 4, 3];
 
   for (let i = 0; i < 320; i++) {
-    const { job, stages, dept } = pick(activeJobs);
+    const { job, stages, dept, team } = pick(activeJobs);
     const firstName = faker.person.firstName();
     const lastName = faker.person.lastName();
     const skills = faker.helpers.arrayElements(SKILLS_BY_DEPT[dept] ?? ["Communication"], { min: 2, max: 4 });
@@ -312,6 +350,7 @@ async function main() {
     const openedAgo = Math.floor((now - (job.openedAt ?? job.createdAt).getTime()) / DAY);
     const appliedAgo = faker.number.int({ min: 1, max: Math.max(2, openedAgo) });
 
+    const candLocation = pick(LOCATIONS).name;
     const [cand] = await db
       .insert(s.candidates)
       .values({
@@ -319,7 +358,7 @@ async function main() {
         lastName,
         email: faker.internet.email({ firstName, lastName }).toLowerCase(),
         phone: faker.phone.number({ style: "national" }),
-        location: pick(LOCATIONS).name,
+        location: candLocation,
         currentTitle: title,
         currentCompany: company,
         linkedinUrl: `https://www.linkedin.com/in/${firstName}-${lastName}-${faker.string.alphanumeric(5)}`.toLowerCase(),
@@ -327,10 +366,24 @@ async function main() {
         resumeText: `${firstName} ${lastName}\n${title} at ${company}\n\nSkills: ${skills.join(", ")}\n\n${faker.lorem.paragraphs(2)}`,
         resumeFileName: `${firstName}_${lastName}_Resume.pdf`,
         ownerId: job.recruiterId,
+        preferredLocale: candLocation === "Montréal, QC" ? "fr-CA" : "en",
         createdAt: daysAgo(appliedAgo),
         updatedAt: daysAgo(Math.max(0, appliedAgo - 3)),
       })
       .returning();
+
+    // Applying records consent to process the application. Sourced prospects haven't consented to anything.
+    if (source.category !== "sourced") {
+      await db.insert(s.consentRecords).values({
+        candidateId: cand.id,
+        purpose: "application_processing",
+        granted: true,
+        policyVersion: "2026-10",
+        locale: cand.preferredLocale,
+        source: source.category === "referral" ? "referral" : "career_site",
+        createdAt: daysAgo(appliedAgo),
+      });
+    }
 
     // Sourced candidates start at Lead; inbound at Application Review.
     const startPos = source.category === "sourced" ? 0 : 1;
@@ -452,7 +505,8 @@ async function main() {
       const panel =
         st.type === "screen"
           ? [users.find((u) => u.id === recruiter)!]
-          : faker.helpers.arrayElements([...interviewers.filter((u) => u.id !== job.hiringManagerId), userByName[users.find((u) => u.id === job.hiringManagerId)!.name]], st.name === "Final Interviews" ? 3 : 1);
+          : // Panels come from the job's hiring team (plus the HM), so every interviewer can see the job.
+            faker.helpers.arrayElements([...team, users.find((u) => u.id === job.hiringManagerId)!], st.name === "Final Interviews" ? 3 : 1);
       const upcoming = start.getTime() > now;
       const [iv] = await db
         .insert(s.interviews)
@@ -539,15 +593,34 @@ async function main() {
           decidedAt: ["accepted", "declined"].includes(offerStatus) ? new Date(offerAt.getTime() + 5 * DAY) : null,
         })
         .returning();
-      const approvers = [users.find((u) => u.id === job.hiringManagerId)!, userByName["James Carter"]];
-      await db.insert(s.offerApprovals).values(
-        approvers.map((a, idx) => ({
-          offerId: offer.id,
-          approverId: a.id,
-          position: idx,
-          status: offerStatus === "pending_approval" && idx === 1 ? ("pending" as const) : ("approved" as const),
-          decidedAt: offerStatus === "pending_approval" && idx === 1 ? null : new Date(offerAt.getTime() + (idx + 1) * 0.5 * DAY),
-        })),
+      const chain = offer.baseSalary >= 200_000 ? seniorOfferChain : offerChain;
+      const approvers = chain.approvers(job.hiringManagerId!);
+      const pending = offerStatus === "pending_approval";
+      const [request] = await db
+        .insert(s.approvalRequests)
+        .values({
+          subject: "offer",
+          subjectId: offer.id,
+          jobId: job.id,
+          chainId: chain.id,
+          status: pending ? "pending" : "approved",
+          requestedById: recruiter,
+          createdAt: offerAt,
+          completedAt: pending ? null : new Date(offerAt.getTime() + approvers.length * 0.5 * DAY),
+        })
+        .returning();
+      await db.insert(s.approvalSteps).values(
+        approvers.map((approverId, idx) => {
+          // Pending offers wait on their last approver.
+          const waiting = pending && idx === approvers.length - 1;
+          return {
+            requestId: request.id,
+            position: idx,
+            approverId,
+            status: waiting ? ("pending" as const) : ("approved" as const),
+            decidedAt: waiting ? null : new Date(offerAt.getTime() + (idx + 1) * 0.5 * DAY),
+          };
+        }),
       );
       acts.push({
         candidateId: cand.id,
@@ -566,6 +639,7 @@ async function main() {
       const sentAt = daysAgo(Math.max(0, appliedAgo - stepDays));
       await db.insert(s.emails).values({
         candidateId: cand.id,
+        applicationId: app.id,
         direction: "outbound",
         fromAddress: sender.email,
         toAddress: cand.email!,
@@ -617,6 +691,65 @@ function jobTitleVariant(title: string) {
   const base = title.replace(/^(Senior|Staff|Junior|Associate|Chief)\s+/, "").replace(/\s*\(.*\)|\s*–.*$/, "");
   return pick(["", "", "Senior ", "Lead "]) + base;
 }
+
+function jobDescriptionFr(title: string, brand: string) {
+  return `## À propos de ${brand}
+
+${brand} fait partie de Purpose Unlimited, une société indépendante de gestion d'actifs et de services financiers axée sur la technologie. Nous bâtissons un meilleur avenir financier pour les Canadiens.
+
+## Le poste
+
+Nous recherchons une personne pour le poste de **${title}** au sein de notre équipe.
+
+## Ce que vous ferez
+
+- Prendre en charge des résultats concrets dès le premier jour
+- Collaborer étroitement avec les équipes des placements, de la technologie et de la distribution
+- Contribuer à façonner notre façon de travailler
+
+## Ce que vous apportez
+
+- Une expérience pertinente dans un rôle semblable
+- Une communication claire et un bon jugement
+- De la curiosité et le goût de l'action
+`;
+}
+
+/** Canadian French versions of the default templates (ARCHITECTURE.md §7.2). */
+const FR_TEMPLATES: (typeof s.emailTemplates.$inferInsert)[] = [
+  {
+    templateKey: "screen_invite",
+    locale: "fr-CA",
+    name: "Invitation à un premier appel (FR)",
+    subject: "{{brand.name}} – discutons du poste de {{job.title}}",
+    body: "Bonjour {{candidate.firstName}},\n\nMerci de votre intérêt pour le poste de {{job.title}} chez {{brand.name}}. J'aimerais planifier un appel de 30 minutes pour mieux vous connaître.\n\nCordialement,\n{{sender.name}}",
+  },
+  {
+    templateKey: "rejection_review",
+    locale: "fr-CA",
+    name: "Refus – après examen de la candidature (FR)",
+    subject: "Votre candidature chez {{brand.name}}",
+    body: "Bonjour {{candidate.firstName}},\n\nMerci d'avoir postulé au poste de {{job.title}}. Après un examen attentif, nous avons décidé de poursuivre avec d'autres candidatures. Nous conserverons votre profil pour de futurs postes.\n\nBonne continuation,\n{{sender.name}}",
+  },
+  {
+    templateKey: "outreach_sourced",
+    locale: "fr-CA",
+    name: "Approche – candidat recruté (FR)",
+    subject: "{{job.title}} chez {{brand.name}}",
+    body: "Bonjour {{candidate.firstName}},\n\nVotre parcours a retenu mon attention. Nous recrutons pour un poste de {{job.title}} chez {{brand.name}} et je pense que vous seriez un excellent choix. Seriez-vous ouvert à une brève discussion?\n\n{{sender.name}}",
+  },
+];
+
+/**
+ * Demo retention defaults (null brand = all brands). Real periods are a policy decision for
+ * Legal/Privacy; these exist so the schema and worker have something to read.
+ */
+const DEMO_RETENTION: (typeof s.retentionPolicies.$inferInsert)[] = [
+  { recordType: "candidate", retentionDays: 730 },
+  { recordType: "archived_application", retentionDays: 730 },
+  { recordType: "email", retentionDays: 730 },
+  { recordType: "interview_feedback", retentionDays: 730 },
+];
 
 function jobDescription(title: string, brand: string) {
   return `## About ${brand}

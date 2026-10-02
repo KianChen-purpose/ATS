@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requireActor } from "@/lib/session";
 import * as interviews from "@/server/services/interviews";
 import * as links from "@/server/services/scheduling-links";
+import { PUBLIC_LIMITS, rateLimit } from "@/server/security/rate-limit";
+import { clientIp } from "@/server/security/request";
 
 /** Outlook free/busy for interviewers, keyed by user id, for the scheduling grid. */
 export async function getAvailability(interviewerIds: string[], fromISO: string, days: number) {
@@ -46,5 +48,8 @@ export async function createSchedulingLink(input: z.input<typeof links.linkSchem
 
 /** Public: candidate books a slot from their link. No staff session; the token authorizes. */
 export async function bookSchedulingLink(token: string, startISO: string) {
-  return links.bookSchedulingLink(links.bookLinkSchema.parse({ token, startISO }));
+  rateLimit(`book:${await clientIp()}`, PUBLIC_LIMITS.book);
+  const d = links.bookLinkSchema.safeParse({ token, startISO });
+  if (!d.success) throw new Error("This scheduling link has expired or was already used.");
+  return links.bookSchedulingLink(d.data);
 }

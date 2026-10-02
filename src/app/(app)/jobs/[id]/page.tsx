@@ -3,8 +3,11 @@ import { notFound } from "next/navigation";
 import { ExternalLink, LayoutGrid, Lock, Plus, Rows3, X } from "lucide-react";
 import { buttonClass } from "@/components/ui/button";
 import { requireActor } from "@/lib/session";
-import { getJobDetail, getPipeline, pipelineCounts } from "@/server/services/jobs";
-import { getCandidateProfile, getProfileOptions } from "@/server/services/candidates";
+import { getJobApproval, getJobDetail, getPipeline, pipelineCounts } from "@/server/services/jobs";
+import { ApprovalDecision } from "@/components/approvals/approval-decision";
+import { ApprovalSteps } from "@/components/approvals/approval-steps";
+import { AddOpeningsButton, CloseOpeningButton } from "@/components/jobs/openings-controls";
+import { getProfileOptions, viewCandidateProfile } from "@/server/services/candidates";
 import { canManageRecruiting } from "@/server/policy";
 import { PageHeader } from "@/components/ui/page-header";
 import { FilterTabs } from "@/components/ui/filter-tabs";
@@ -46,10 +49,11 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
   const job = await getJobDetail(user, id);
   if (!job) notFound();
   const canManage = canManageRecruiting(user);
+  const approval = await getJobApproval(user, id);
 
   const [apps, counts, options] = await Promise.all([getPipeline(user, id, status), pipelineCounts(user, id), getProfileOptions(user)]);
   const panelCandidateId = str("c");
-  const panelProfile = panelCandidateId ? await getCandidateProfile(user, panelCandidateId) : null;
+  const panelProfile = panelCandidateId ? await viewCandidateProfile(user, panelCandidateId, "job_panel") : null;
 
   const href = (next: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
@@ -77,7 +81,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
         subtitle={
           <span className="flex flex-wrap items-center gap-x-2">
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: job.brand.primaryColor }} />
+              <span className="h-2 w-2 rounded-full" style={{ background: job.brand.primaryColor ?? "var(--pats-black)" }} />
               {job.brand.name}
             </span>
             {job.department && <span>· {job.department.name}</span>}
@@ -108,6 +112,24 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
           ]}
         />
       </PageHeader>
+
+      {approval && (job.status === "pending_approval" || (job.status === "draft" && approval.status === "rejected")) && (
+        <div className="border-b border-zinc-200 bg-white px-6 py-4">
+          <div className="mx-auto flex max-w-5xl flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base">{approval.status === "rejected" ? "Approval was rejected" : "Waiting for approval to open"}</h2>
+              <p className="mb-3 text-xs text-zinc-500">
+                Requested by {approval.requestedBy?.name ?? "PATS"} · {fmt(approval.createdAt, "MMM d, h:mm a", user.timezone)}
+                {approval.status === "rejected" && " · Edit the job and set it to Open to request approval again."}
+              </p>
+              <ApprovalSteps steps={approval.steps} timezone={user.timezone} />
+            </div>
+            {approval.status === "pending" && approval.steps.find((st) => st.status === "pending")?.approverId === user.id && (
+              <ApprovalDecision requestId={approval.id} />
+            )}
+          </div>
+        </div>
+      )}
 
       {tab === "pipeline" && (
         <>
@@ -202,7 +224,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
       {tab === "openings" && (
         <div className="mx-auto grid w-full max-w-5xl gap-4 px-6 py-6 lg:grid-cols-2">
           <Card>
-            <CardHeader title="Openings" />
+            <CardHeader title="Openings" action={canManage && <AddOpeningsButton jobId={job.id} />} />
             <table className="w-full">
               <thead>
                 <tr className="text-left text-[11px] font-medium text-zinc-500 uppercase">
@@ -210,6 +232,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
                   <th className="px-4 py-2">Reason</th>
                   <th className="px-4 py-2">Target start</th>
                   <th className="px-4 py-2">Status</th>
+                  {canManage && <th className="px-4 py-2" />}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -221,6 +244,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
                     <td className="px-4 py-2">
                       <Badge tone={o.status === "open" ? "green" : "neutral"}>{o.status}</Badge>
                     </td>
+                    {canManage && <td className="px-4 py-2 text-right">{o.status === "open" && <CloseOpeningButton openingId={o.id} code={o.code} />}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -238,7 +262,7 @@ export default async function JobPage(props: PageProps<"/jobs/[id]">) {
                 .filter((x): x is NonNullable<typeof x> => !!x)
                 .map((m) => (
                   <li key={m.user.id + m.role} className="flex items-center gap-3 px-4 py-2">
-                    <Avatar name={m.user.name} color={m.user.avatarColor} size={26} />
+                    <Avatar name={m.user.name} size={26} />
                     <div className="min-w-0 flex-1">
                       <div className="font-medium">{m.user.name}</div>
                       <div className="text-xs text-zinc-500">{m.user.title}</div>

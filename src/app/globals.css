@@ -1,18 +1,54 @@
 @import "tailwindcss";
+/* Single source for brand colour and type (ARCHITECTURE.md D11, brand/BRAND.md). */
+@import "../../brand/tokens.css";
 
-/* PATS design tokens. Swap these for official Purpose brand values. */
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+/*
+ * Tailwind theme mapped onto the brand tokens. Nothing here is a free-standing colour:
+ * every value is a token or a color-mix of tokens, so changing brand/tokens.css re-themes the app.
+ *
+ * - The neutral scale (Tailwind's `zinc-*`, used throughout the UI) runs Ivory → Warm Neutral → Black.
+ *   Steps 400+ are darkened past Warm Neutral where needed so text meets WCAG 2.1 AA
+ *   (400 ≥ 4.5:1 on white and Ivory). BRAND.md: accessibility wins over a brand choice.
+ * - `accent-*` is the execution colour: Black for primary actions and active states.
+ */
+@theme inline {
+  --font-sans: "Inter Variable", var(--pats-font-secondary);
+  --font-display: var(--pats-font-primary);
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-accent-50: #f3f1ff;
-  --color-accent-100: #e9e5ff;
-  --color-accent-200: #d5ceff;
-  --color-accent-500: #6d5cf6;
-  --color-accent-600: #5b45e8;
-  --color-accent-700: #4c36cc;
+  --color-white: #fff;
+  --color-black: var(--pats-black);
+  --color-canvas: var(--pats-bg);
 
-  --color-canvas: #f7f7f8;
+  --color-zinc-50: color-mix(in srgb, var(--pats-ivory) 40%, white);
+  --color-zinc-100: var(--pats-ivory);
+  --color-zinc-200: color-mix(in srgb, var(--pats-warm-neutral) 35%, var(--pats-ivory));
+  --color-zinc-300: color-mix(in srgb, var(--pats-warm-neutral) 70%, var(--pats-ivory));
+  --color-zinc-400: color-mix(in srgb, var(--pats-warm-neutral) 68%, var(--pats-black));
+  --color-zinc-500: color-mix(in srgb, var(--pats-warm-neutral) 58%, var(--pats-black));
+  --color-zinc-600: color-mix(in srgb, var(--pats-warm-neutral) 46%, var(--pats-black));
+  --color-zinc-700: color-mix(in srgb, var(--pats-warm-neutral) 32%, var(--pats-black));
+  --color-zinc-800: color-mix(in srgb, var(--pats-warm-neutral) 18%, var(--pats-black));
+  --color-zinc-900: color-mix(in srgb, var(--pats-warm-neutral) 8%, var(--pats-black));
+  --color-zinc-950: var(--pats-black);
+
+  --color-accent-50: color-mix(in srgb, var(--pats-warm-neutral) 18%, var(--pats-ivory));
+  --color-accent-100: color-mix(in srgb, var(--pats-warm-neutral) 30%, var(--pats-ivory));
+  --color-accent-200: color-mix(in srgb, var(--pats-warm-neutral) 50%, var(--pats-ivory));
+  --color-accent-300: var(--pats-warm-neutral);
+  --color-accent-500: color-mix(in srgb, var(--pats-warm-neutral) 40%, var(--pats-black));
+  --color-accent-600: var(--pats-black);
+  --color-accent-700: color-mix(in srgb, var(--pats-warm-neutral) 22%, var(--pats-black));
+
+  --color-avatar-1: var(--pats-black);
+  --color-avatar-2: color-mix(in srgb, var(--pats-warm-neutral) 35%, var(--pats-black));
+  --color-avatar-3: color-mix(in srgb, var(--pats-warm-neutral) 58%, var(--pats-black));
+  --color-avatar-4: var(--pats-warm-neutral);
+  --color-avatar-5: color-mix(in srgb, var(--pats-warm-neutral) 40%, var(--pats-ivory));
+
+  /* Microsoft Teams' own brand colour, used only on "Join Teams meeting" links. */
+  --color-teams: #5b5fc7;
+  --color-teams-hover: #4f52b2;
 }
 
 html,
@@ -22,10 +58,17 @@ body {
 
 body {
   background: var(--color-canvas);
-  color: var(--color-zinc-900);
+  color: var(--pats-text);
   font-family: var(--font-sans);
   font-size: 13px;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Season Mix for headings and subheadings (BRAND.md). It ships in 400 and 500. */
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
 }
 
 /* Dense, Ashby-like defaults */
@@ -36,7 +79,6 @@ body {
 
 .prose-job h2 {
   font-size: 15px;
-  font-weight: 600;
   margin: 1.25rem 0 0.5rem;
 }
 .prose-job p,
@@ -52,7 +94,7 @@ body {
   padding: 8px 10px 4px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--color-zinc-400);
+  color: var(--color-zinc-500);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }

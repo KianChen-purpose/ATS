@@ -33,7 +33,7 @@ export function SelfSchedule({ token, slots, durationMin, brandColor }: { token:
         </p>
         <p className="mt-1 text-xs text-zinc-500">A calendar invitation and confirmation email are on their way.</p>
         {booked.meetingUrl && (
-          <a href={booked.meetingUrl} className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-[#5b5fc7] px-3 py-1.5 font-medium text-white">
+          <a href={booked.meetingUrl} className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-teams px-3 py-1.5 font-medium text-white">
             <Video size={14} /> Microsoft Teams link
           </a>
         )}
@@ -55,7 +55,7 @@ export function SelfSchedule({ token, slots, durationMin, brandColor }: { token:
               <button
                 onClick={() => { setDay(i); setSelected(null); }}
                 className="w-full rounded-md border px-3 py-2 text-left"
-                style={i === day ? { borderColor: brandColor, background: `${brandColor}10` } : { borderColor: "#e4e4e7" }}
+                style={i === day ? { borderColor: brandColor, background: `color-mix(in srgb, ${brandColor} 8%, transparent)` } : { borderColor: "var(--color-zinc-200)" }}
               >
                 <div className="font-medium">{label}</div>
                 <div className="text-xs text-zinc-500">{list.length} times</div>
@@ -70,7 +70,7 @@ export function SelfSchedule({ token, slots, durationMin, brandColor }: { token:
                 key={s}
                 onClick={() => setSelected(s)}
                 className="rounded-md border px-2 py-2 font-medium"
-                style={selected === s ? { background: brandColor, borderColor: brandColor, color: "white" } : { borderColor: "#e4e4e7" }}
+                style={selected === s ? { background: brandColor, borderColor: brandColor, color: "var(--pats-ivory)" } : { borderColor: "var(--color-zinc-200)" }}
               >
                 {time(s)}
               </button>

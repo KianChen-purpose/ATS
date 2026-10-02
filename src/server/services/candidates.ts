@@ -14,7 +14,9 @@ import {
   type Actor,
   type UserActor,
 } from "@/server/policy";
-import { recordAudit } from "./audit";
+import { searchIndex } from "@/server/integrations/search";
+import { recordAudit, recordView } from "./audit";
+import { latestApprovals } from "./approvals";
 import { listPickableJobs } from "./jobs";
 
 // ---------------------------------------------------------------------------
@@ -29,7 +31,7 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
       applications: {
         orderBy: desc(s.applications.appliedAt),
         with: {
-          job: { with: { brand: true, stages: { orderBy: asc(s.jobStages.position) }, team: true } },
+          job: { with: { brand: true, stages: { orderBy: asc(s.jobStages.position) }, team: true, openings: { orderBy: asc(s.openings.code) } } },
           stage: true,
           source: true,
           archiveReason: true,
@@ -40,7 +42,7 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
             with: { stage: true, interviewers: { with: { user: true } } },
           },
           scorecards: { orderBy: desc(s.scorecards.submittedAt), with: { author: true, interview: true } },
-          offers: { orderBy: desc(s.offers.createdAt), with: { approvals: { orderBy: asc(s.offerApprovals.position), with: { approver: true } } } },
+          offers: { orderBy: desc(s.offers.createdAt) },
         },
       },
       activities: { orderBy: desc(s.activities.createdAt), with: { actor: true } },
@@ -55,25 +57,41 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
   const visibleAppIds = new Set(visibleApps.map((a) => a.id));
 
   const seesComp = canViewCompensation(actor);
+  const offerApprovals = await latestApprovals("offer", seesComp ? visibleApps.flatMap((a) => a.offers.map((o) => o.id)) : []);
   const applications = visibleApps.map((a) => {
     const submittedOwn = a.scorecards.some((sc) => sc.authorId === actor.id);
     const blind = !canSeeOthersFeedback(actor, submittedOwn);
     return {
       ...a,
+      // Field-level: compensation ranges are restricted (ARCHITECTURE.md §3.5).
+      job: seesComp ? a.job : { ...a.job, compMin: null, compMax: null },
       scorecards: blind ? a.scorecards.filter((sc) => sc.authorId === actor.id) : a.scorecards,
       feedbackHidden: blind ? a.scorecards.length : 0,
-      offers: seesComp ? a.offers : [],
+      offers: seesComp ? a.offers.map((o) => ({ ...o, approval: offerApprovals.get(o.id) ?? null, approvals: offerApprovals.get(o.id)?.steps ?? [] })) : [],
     };
   });
 
+  // Rows tied to a job follow that job's visibility; candidate-level rows are for prospect roles only (§3.7).
+  const visibleRow = (applicationId: string | null) => (applicationId ? visibleAppIds.has(applicationId) : canSeeProspects(actor));
   return {
     ...candidate,
     applications,
-    activities: candidate.activities.filter((act) => !act.applicationId || visibleAppIds.has(act.applicationId)),
+    activities: candidate.activities.filter((act) => visibleRow(act.applicationId)),
+    emails: candidate.emails.filter((e) => visibleRow(e.applicationId)),
   };
 }
 
 export type CandidateProfile = NonNullable<Awaited<ReturnType<typeof getCandidateProfile>>>;
+
+/**
+ * Load a candidate profile for display and audit the view (the profile includes the resume).
+ * Use this from pages; getCandidateProfile is for internal reads that don't show the profile.
+ */
+export async function viewCandidateProfile(actor: UserActor, candidateId: string, via: "profile" | "job_panel" | "scheduler") {
+  const profile = await getCandidateProfile(actor, candidateId);
+  if (profile) await recordView(db, actor, "candidate.viewed", "candidate", candidateId, { via, includesResume: Boolean(profile.resumeText) });
+  return profile;
+}
 
 /** Throws NotFound unless the actor can see the candidate (ARCHITECTURE.md §3.3). */
 export async function assertCanSeeCandidate(actor: UserActor, candidateId: string) {
@@ -124,17 +142,7 @@ export async function listCandidates(actor: UserActor, f: CandidateListFilters) 
     sql`EXISTS (SELECT 1 FROM applications a WHERE a.candidate_id = ${s.candidates.id} AND a.job_id IN (${jobIds})
         ${appConds.length ? sql`AND ${sql.join(appConds, sql` AND `)}` : sql``})`,
   ];
-  if (f.q) {
-    const like = `%${f.q}%`;
-    where.push(sql`(
-      (${s.candidates.firstName} || ' ' || ${s.candidates.lastName}) ILIKE ${like}
-      OR ${s.candidates.email} ILIKE ${like}
-      OR ${s.candidates.currentCompany} ILIKE ${like}
-      OR ${s.candidates.currentTitle} ILIKE ${like}
-      OR array_to_string(${s.candidates.tags}, ' ') ILIKE ${like}
-      OR ${s.candidates.resumeText} ILIKE ${like}
-    )`);
-  }
+  if (f.q) where.push(searchIndex().candidateTextFilter(f.q, { includeResume: true }));
   const page = Math.max(1, f.page ?? 1);
   // Drizzle renders columns unqualified inside single-table selects; qualify explicitly for correlated subqueries.
   const candId = sql.raw(`"candidates"."id"`);

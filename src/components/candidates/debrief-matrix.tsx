@@ -5,7 +5,7 @@ type Scorecard = {
   id: string;
   overall: string;
   ratings: Record<string, number>;
-  author: { name: string; avatarColor: string };
+  author: { name: string };
   interview: { title: string } | null;
 };
 
@@ -56,7 +56,7 @@ export function DebriefMatrix({ scorecards, attributeLabels, jobTitle }: { score
               <tr key={s.id}>
                 <td className="px-3 py-1.5">
                   <div className="flex items-center gap-2">
-                    <Avatar name={s.author.name} color={s.author.avatarColor} size={20} />
+                    <Avatar name={s.author.name} size={20} />
                     <div className="min-w-0">
                       <div className="truncate">{s.author.name}</div>
                       <div className="truncate text-[11px] text-zinc-500">{s.interview?.title.split(" – ")[0]}</div>

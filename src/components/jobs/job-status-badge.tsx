@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 
 const MAP = {
   open: { tone: "green", label: "Open" },
+  pending_approval: { tone: "amber", label: "Pending approval" },
   on_hold: { tone: "amber", label: "On hold" },
   draft: { tone: "neutral", label: "Draft" },
   closed: { tone: "neutral", label: "Closed" },

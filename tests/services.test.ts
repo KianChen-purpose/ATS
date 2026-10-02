@@ -100,7 +100,8 @@ describe("job and candidate services", () => {
     );
     expect(await db.query.jobStages.findMany({ where: eq(s.jobStages.jobId, id) })).toHaveLength(8);
     expect(await db.query.openings.findMany({ where: eq(s.openings.jobId, id) })).toHaveLength(2);
-    expect((await auditFor(id)).map((r) => r.action)).toEqual(["job.created"]);
+    // No job chain in this test, so "open" opens immediately.
+    expect((await auditFor(id)).map((r) => r.action).sort()).toEqual(["job.created", "job.status_changed"]);
   });
 
   it("setJobStatus audits the change", async () => {
@@ -182,5 +183,36 @@ describe("scheduling and feedback services", () => {
     const [iv] = await db.query.interviews.findMany({ where: eq(s.interviews.applicationId, app.id) });
     const [row] = await auditFor(iv.id);
     expect(row).toMatchObject({ action: "interview.scheduled", actorId: null, metadata: { systemActor: systemActor("self_scheduling").name } });
+  });
+
+  it("stores only a hash of the link token and rejects malformed tokens", async () => {
+    const { recruiter, interviewerRow, app } = await setup();
+    const { url } = await links.createSchedulingLink(recruiter, { applicationId: app.id, stageId: null, interviewerIds: [interviewerRow.id], durationMin: 30, days: 7, sendEmail: false });
+    const token = url.split("/").pop()!;
+    expect(token.length).toBeGreaterThanOrEqual(43); // 32 random bytes, base64url
+    const [row] = await db.query.schedulingLinks.findMany();
+    expect(row.tokenHash).toBe(links.hashToken(token));
+    expect(JSON.stringify(row)).not.toContain(token);
+    expect((await links.getPublicSchedulingPage("not a token")).state).toBe("invalid");
+    expect((await links.getPublicSchedulingPage(token.slice(0, -2) + "xx")).state).toBe("invalid");
+  });
+
+  it("expired links can't be opened or booked", async () => {
+    const { recruiter, interviewerRow, app } = await setup();
+    const { url } = await links.createSchedulingLink(recruiter, { applicationId: app.id, stageId: null, interviewerIds: [interviewerRow.id], durationMin: 30, days: 7, sendEmail: false });
+    const token = url.split("/").pop()!;
+    await db.update(s.schedulingLinks).set({ windowEnd: new Date(Date.now() - 1000) });
+    expect((await links.getPublicSchedulingPage(token)).state).toBe("expired");
+    await expect(links.bookSchedulingLink({ token, startISO: new Date(Date.now() + 86_400_000).toISOString() })).rejects.toThrow(/expired/);
+  });
+});
+
+describe("rate limiting", () => {
+  it("blocks after the limit within a window", async () => {
+    const { rateLimit, resetRateLimits, RateLimitError } = await import("@/server/security/rate-limit");
+    resetRateLimits();
+    for (let i = 0; i < 3; i++) rateLimit("t:1", { limit: 3, windowMs: 60_000 });
+    expect(() => rateLimit("t:1", { limit: 3, windowMs: 60_000 })).toThrow(RateLimitError);
+    expect(() => rateLimit("t:2", { limit: 3, windowMs: 60_000 })).not.toThrow();
   });
 });

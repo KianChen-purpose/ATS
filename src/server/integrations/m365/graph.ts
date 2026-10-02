@@ -28,28 +28,39 @@ async function token() {
   return tokenCache.token;
 }
 
+const MAX_ATTEMPTS = 4;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Graph request that honours 429/503 Retry-After with exponential backoff (ARCHITECTURE.md §8.3). */
 async function graph<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${GRAPH}${path}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${await token()}`, "Content-Type": "application/json", ...init.headers },
-  });
-  if (!res.ok) throw new Error(`Graph ${init.method ?? "GET"} ${path} failed: ${res.status} ${await res.text()}`);
-  return (res.status === 202 || res.status === 204 ? undefined : await res.json()) as T;
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetch(`${GRAPH}${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${await token()}`, "Content-Type": "application/json", ...init.headers },
+    });
+    if ((res.status === 429 || res.status === 503) && attempt < MAX_ATTEMPTS) {
+      const retryAfter = Number(res.headers.get("retry-after"));
+      await sleep(Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 30) * 1000 : 2 ** attempt * 500);
+      continue;
+    }
+    if (!res.ok) throw new Error(`Graph ${init.method ?? "GET"} ${path.split("/")[1]} failed: ${res.status} ${await res.text()}`);
+    return (res.status === 202 || res.status === 204 ? undefined : await res.json()) as T;
+  }
 }
 
 async function logged<T>(
   service: "mail" | "calendar" | "teams",
   operation: string,
-  summary: string,
-  request: Record<string, unknown>,
+  recipients: string[],
   fn: () => Promise<T>,
+  ids: (out: T) => Record<string, string | null | undefined> = () => ({}),
 ): Promise<T> {
   try {
     const out = await fn();
-    await recordIntegrationEvent({ service, operation, mode: "live", summary, request, response: (out ?? {}) as Record<string, unknown> });
+    await recordIntegrationEvent({ service, operation, mode: "live", recipients, ids: ids(out) });
     return out;
   } catch (err) {
-    await recordIntegrationEvent({ service, operation, mode: "live", success: false, summary: `FAILED: ${summary}`, request, response: { error: String(err) } });
+    await recordIntegrationEvent({ service, operation, mode: "live", success: false, recipients, error: err });
     throw err;
   }
 }
@@ -58,7 +69,7 @@ export const graphM365: M365Client = {
   mode: "live",
   mail: {
     send(input) {
-      return logged("mail", "sendMail", `Sent "${input.subject}" to ${input.to}`, { ...input }, async () => {
+      return logged("mail", "sendMail", [input.to, ...(input.cc ?? [])], async () => {
         // Create as draft first so we get ids back for thread sync, then send.
         const draft = await graph<{ id: string; conversationId: string }>(`/users/${encodeURIComponent(input.from)}/messages`, {
           method: "POST",
@@ -71,12 +82,12 @@ export const graphM365: M365Client = {
         });
         await graph(`/users/${encodeURIComponent(input.from)}/messages/${draft.id}/send`, { method: "POST" });
         return { messageId: draft.id, threadId: draft.conversationId };
-      });
+      }, (r) => r);
     },
   },
   calendar: {
     getSchedule(emails, start, end) {
-      return logged("calendar", "getSchedule", `Fetched free/busy for ${emails.length} people`, { emails }, async () => {
+      return logged("calendar", "getSchedule", emails, async () => {
         const res = await graph<{ value: { scheduleId: string; scheduleItems: { status: string; start: { dateTime: string }; end: { dateTime: string } }[] }[] }>(
           `/users/${encodeURIComponent(process.env.M365_SENDER_MAILBOX || emails[0])}/calendar/getSchedule`,
           {
@@ -104,7 +115,7 @@ export const graphM365: M365Client = {
       });
     },
     createEvent(input) {
-      return logged("calendar", "createEvent", `Created "${input.subject}"`, { subject: input.subject, organizer: input.organizer }, async () => {
+      return logged("calendar", "createEvent", input.attendees.map((a) => a.email), async () => {
         const ev = await graph<{ id: string; webLink: string; onlineMeeting?: { joinUrl: string } }>(
           `/users/${encodeURIComponent(input.organizer)}/events`,
           {
@@ -125,21 +136,22 @@ export const graphM365: M365Client = {
           },
         );
         return { eventId: ev.id, joinUrl: ev.onlineMeeting?.joinUrl ?? null, webLink: ev.webLink };
-      });
+      }, (r) => ({ eventId: r.eventId }));
     },
     async cancelEvent(organizer, eventId, comment) {
-      await logged("calendar", "cancelEvent", `Cancelled event on ${organizer}'s calendar`, { organizer, eventId }, () =>
+      await logged("calendar", "cancelEvent", [organizer], () =>
         graph(`/users/${encodeURIComponent(organizer)}/events/${eventId}/cancel`, {
           method: "POST",
           body: JSON.stringify({ comment: comment ?? "" }),
         }),
+        () => ({ eventId }),
       );
     },
   },
   teams: {
     async notify(n) {
       // Requires the PATS Teams app installed for the user (see docs/INTEGRATIONS.md).
-      await logged("teams", "sendActivityNotification", `Teams → ${n.toEmail}: ${n.title}`, { ...n }, () =>
+      await logged("teams", "sendActivityNotification", [n.toEmail], () =>
         graph(`/users/${encodeURIComponent(n.toEmail)}/teamwork/sendActivityNotification`, {
           method: "POST",
           body: JSON.stringify({

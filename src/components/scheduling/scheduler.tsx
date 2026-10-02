@@ -11,7 +11,7 @@ import { cn, DEFAULT_TZ, fmt } from "@/lib/utils";
 import { businessDays, busyPeople, slotsForDay, type Busy } from "@/lib/availability";
 import { createSchedulingLink, getAvailability, scheduleInterview } from "@/server/actions/scheduling";
 
-type Person = { id: string; name: string; title: string | null; avatarColor: string; role: string };
+type Person = { id: string; name: string; title: string | null; role: string };
 type Stage = { id: string; name: string; type: string };
 
 export function Scheduler(props: {
@@ -130,7 +130,7 @@ export function Scheduler(props: {
             {people.map((p) => (
               <label key={p.id} className={cn("flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 hover:bg-zinc-50", interviewerIds.includes(p.id) && "bg-accent-50/60")}>
                 <input type="checkbox" checked={interviewerIds.includes(p.id)} onChange={() => toggle(p.id)} />
-                <Avatar name={p.name} color={p.avatarColor} size={20} />
+                <Avatar name={p.name} size={20} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{p.name}</span>
                   <span className="block truncate text-[11px] text-zinc-500">{p.title}</span>
@@ -162,7 +162,7 @@ export function Scheduler(props: {
                 <div className="text-zinc-600">
                   {fmt(selected, "h:mm a")} – {fmt(new Date(selected.getTime() + duration * 60_000), "h:mm a")} ET
                 </div>
-                <div className="mt-1 flex items-center gap-1 text-xs text-[#5b5fc7]"><Video size={12} /> Teams meeting will be created</div>
+                <div className="mt-1 flex items-center gap-1 text-xs text-teams"><Video size={12} /> Teams meeting will be created</div>
                 <Button variant="primary" className="mt-3 w-full" disabled={saving || interviewerIds.length === 0} onClick={confirm}>
                   {saving ? "Scheduling…" : props.replaceInterview ? "Reschedule interview" : "Schedule interview"}
                 </Button>
