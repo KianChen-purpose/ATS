@@ -43,6 +43,13 @@
       "when": 1790886439582,
       "tag": "0005_brand_tokens_no_hardcoded_colours",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1790904179818,
+      "tag": "0006_generic_approval_chains",
+      "breakpoints": true
     }
   ]
 }

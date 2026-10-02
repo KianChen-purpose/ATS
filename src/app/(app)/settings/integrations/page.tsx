@@ -5,6 +5,7 @@ import { listIntegrationEvents } from "@/server/services/users";
 import { requireActor } from "@/lib/session";
 import { m365Configured } from "@/server/integrations/m365";
 import { PageHeader } from "@/components/ui/page-header";
+import { SettingsTabs } from "@/components/settings/settings-tabs";
 import { Card, CardHeader, EmptyState } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { timeAgo } from "@/lib/utils";
@@ -32,7 +33,9 @@ export default async function IntegrationsPage() {
         title="Integrations"
         subtitle="Microsoft 365 connection for Purpose Unlimited"
         actions={live ? <Badge tone="green">Live · Microsoft Graph</Badge> : <Badge tone="amber">Mock mode</Badge>}
-      />
+      >
+        <SettingsTabs active="integrations" />
+      </PageHeader>
       <div className="mx-auto max-w-5xl space-y-4 px-6 py-6">
         {!live && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">

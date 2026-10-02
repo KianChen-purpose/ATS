@@ -107,7 +107,11 @@ export const offerStatus = pgEnum("offer_status", [
   "accepted",
   "declined",
 ]);
-export const approvalStatus = pgEnum("approval_status", ["pending", "approved", "rejected"]);
+export const approvalSubject = pgEnum("approval_subject", ["job", "offer"]);
+export const approvalRequestStatus = pgEnum("approval_request_status", ["pending", "approved", "rejected", "cancelled"]);
+export const approvalStepStatus = pgEnum("approval_step_status", ["pending", "approved", "rejected", "skipped"]);
+/** Who approves a chain step: a named person, or a role resolved from the job when the request starts. */
+export const approverType = pgEnum("approver_type", ["user", "hiring_manager", "recruiter"]);
 export const emailDirection = pgEnum("email_direction", ["outbound", "inbound"]);
 
 // ---------------------------------------------------------------------------
@@ -459,20 +463,6 @@ export const offers = pgTable("offers", {
   decidedAt: timestamp("decided_at", { withTimezone: true }),
 });
 
-export const offerApprovals = pgTable("offer_approvals", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  offerId: uuid("offer_id")
-    .notNull()
-    .references(() => offers.id, { onDelete: "restrict" }),
-  approverId: uuid("approver_id")
-    .notNull()
-    .references(() => users.id),
-  position: integer("position").notNull(),
-  status: approvalStatus("status").notNull().default("pending"),
-  comment: text("comment"),
-  decidedAt: timestamp("decided_at", { withTimezone: true }),
-});
-
 // ---------------------------------------------------------------------------
 // Communication
 // ---------------------------------------------------------------------------
@@ -555,6 +545,87 @@ export const integrationEvents = pgTable("integration_events", {
 // ---------------------------------------------------------------------------
 
 export const brandsRelations = relations(brands, ({ many }) => ({ jobs: many(jobs) }));
+
+// ---------------------------------------------------------------------------
+// Approvals (ARCHITECTURE.md §7.4): one generic model for job/requisition and offer approvals
+// ---------------------------------------------------------------------------
+
+/**
+ * A configured approval chain. The most specific active chain wins: brand over all-brands,
+ * department over all-departments, then the highest `minAmount` at or below the request amount.
+ */
+export const approvalChains = pgTable(
+  "approval_chains",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    subject: approvalSubject("subject").notNull(),
+    /** Null = applies to every brand. */
+    brandId: uuid("brand_id").references(() => brands.id),
+    /** Null = applies to every department. */
+    departmentId: uuid("department_id").references(() => departments.id),
+    /** Offers: applies when base salary ≥ this (whole dollars). Null = any amount. */
+    minAmount: integer("min_amount"),
+    active: boolean("active").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("approval_chains_subject_idx").on(t.subject, t.active)],
+);
+
+export const approvalChainSteps = pgTable(
+  "approval_chain_steps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    chainId: uuid("chain_id")
+      .notNull()
+      .references(() => approvalChains.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    approverType: approverType("approver_type").notNull(),
+    /** Required when approverType = "user". */
+    approverId: uuid("approver_id").references(() => users.id),
+  },
+  (t) => [uniqueIndex("approval_chain_steps_pos_uq").on(t.chainId, t.position)],
+);
+
+/** One approval run for a job or an offer. Steps are resolved and frozen when it starts. */
+export const approvalRequests = pgTable(
+  "approval_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    subject: approvalSubject("subject").notNull(),
+    /** jobs.id or offers.id, depending on `subject`. */
+    subjectId: uuid("subject_id").notNull(),
+    /** Job context for visibility (ARCHITECTURE.md §3.7). */
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "restrict" }),
+    chainId: uuid("chain_id").references(() => approvalChains.id),
+    status: approvalRequestStatus("status").notNull().default("pending"),
+    requestedById: uuid("requested_by_id").references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [index("approval_requests_subject_idx").on(t.subject, t.subjectId), index("approval_requests_job_idx").on(t.jobId)],
+);
+
+export const approvalSteps = pgTable(
+  "approval_steps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requestId: uuid("request_id")
+      .notNull()
+      .references(() => approvalRequests.id, { onDelete: "restrict" }),
+    position: integer("position").notNull(),
+    approverId: uuid("approver_id")
+      .notNull()
+      .references(() => users.id),
+    status: approvalStepStatus("status").notNull().default("pending"),
+    comment: text("comment"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("approval_steps_pos_uq").on(t.requestId, t.position), index("approval_steps_approver_idx").on(t.approverId, t.status)],
+);
 
 // ---------------------------------------------------------------------------
 // Localization
@@ -724,16 +795,33 @@ export const scorecardsRelations = relations(scorecards, ({ one }) => ({
   author: one(users, { fields: [scorecards.authorId], references: [users.id] }),
 }));
 
-export const offersRelations = relations(offers, ({ one, many }) => ({
+export const offersRelations = relations(offers, ({ one }) => ({
   application: one(applications, { fields: [offers.applicationId], references: [applications.id] }),
   opening: one(openings, { fields: [offers.openingId], references: [openings.id] }),
   createdBy: one(users, { fields: [offers.createdById], references: [users.id] }),
-  approvals: many(offerApprovals),
 }));
 
-export const offerApprovalsRelations = relations(offerApprovals, ({ one }) => ({
-  offer: one(offers, { fields: [offerApprovals.offerId], references: [offers.id] }),
-  approver: one(users, { fields: [offerApprovals.approverId], references: [users.id] }),
+export const approvalChainsRelations = relations(approvalChains, ({ one, many }) => ({
+  brand: one(brands, { fields: [approvalChains.brandId], references: [brands.id] }),
+  department: one(departments, { fields: [approvalChains.departmentId], references: [departments.id] }),
+  steps: many(approvalChainSteps),
+}));
+
+export const approvalChainStepsRelations = relations(approvalChainSteps, ({ one }) => ({
+  chain: one(approvalChains, { fields: [approvalChainSteps.chainId], references: [approvalChains.id] }),
+  approver: one(users, { fields: [approvalChainSteps.approverId], references: [users.id] }),
+}));
+
+export const approvalRequestsRelations = relations(approvalRequests, ({ one, many }) => ({
+  job: one(jobs, { fields: [approvalRequests.jobId], references: [jobs.id] }),
+  chain: one(approvalChains, { fields: [approvalRequests.chainId], references: [approvalChains.id] }),
+  requestedBy: one(users, { fields: [approvalRequests.requestedById], references: [users.id] }),
+  steps: many(approvalSteps),
+}));
+
+export const approvalStepsRelations = relations(approvalSteps, ({ one }) => ({
+  request: one(approvalRequests, { fields: [approvalSteps.requestId], references: [approvalRequests.id] }),
+  approver: one(users, { fields: [approvalSteps.approverId], references: [users.id] }),
 }));
 
 export const emailsRelations = relations(emails, ({ one }) => ({

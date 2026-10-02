@@ -16,6 +16,7 @@ import {
 } from "@/server/policy";
 import { searchIndex } from "@/server/integrations/search";
 import { recordAudit, recordView } from "./audit";
+import { latestApprovals } from "./approvals";
 import { listPickableJobs } from "./jobs";
 
 // ---------------------------------------------------------------------------
@@ -41,7 +42,7 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
             with: { stage: true, interviewers: { with: { user: true } } },
           },
           scorecards: { orderBy: desc(s.scorecards.submittedAt), with: { author: true, interview: true } },
-          offers: { orderBy: desc(s.offers.createdAt), with: { approvals: { orderBy: asc(s.offerApprovals.position), with: { approver: true } } } },
+          offers: { orderBy: desc(s.offers.createdAt) },
         },
       },
       activities: { orderBy: desc(s.activities.createdAt), with: { actor: true } },
@@ -56,6 +57,7 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
   const visibleAppIds = new Set(visibleApps.map((a) => a.id));
 
   const seesComp = canViewCompensation(actor);
+  const offerApprovals = await latestApprovals("offer", seesComp ? visibleApps.flatMap((a) => a.offers.map((o) => o.id)) : []);
   const applications = visibleApps.map((a) => {
     const submittedOwn = a.scorecards.some((sc) => sc.authorId === actor.id);
     const blind = !canSeeOthersFeedback(actor, submittedOwn);
@@ -63,7 +65,7 @@ export async function getCandidateProfile(actor: UserActor, candidateId: string)
       ...a,
       scorecards: blind ? a.scorecards.filter((sc) => sc.authorId === actor.id) : a.scorecards,
       feedbackHidden: blind ? a.scorecards.length : 0,
-      offers: seesComp ? a.offers : [],
+      offers: seesComp ? a.offers.map((o) => ({ ...o, approvals: offerApprovals.get(o.id)?.steps ?? [] })) : [],
     };
   });
 

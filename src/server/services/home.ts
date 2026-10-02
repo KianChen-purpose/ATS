@@ -63,7 +63,8 @@ export async function getHomeData(actor: UserActor) {
     // Offer approvals waiting on me (all earlier approvers have approved)
     db
       .select({
-        approvalId: s.offerApprovals.id,
+        approvalId: s.approvalSteps.id,
+        requestId: s.approvalRequests.id,
         offerId: s.offers.id,
         baseSalary: s.offers.baseSalary,
         currency: s.offers.currency,
@@ -73,17 +74,18 @@ export async function getHomeData(actor: UserActor) {
         lastName: s.candidates.lastName,
         jobTitle: s.jobs.title,
       })
-      .from(s.offerApprovals)
-      .innerJoin(s.offers, eq(s.offers.id, s.offerApprovals.offerId))
+      .from(s.approvalSteps)
+      .innerJoin(s.approvalRequests, eq(s.approvalRequests.id, s.approvalSteps.requestId))
+      .innerJoin(s.offers, and(eq(s.approvalRequests.subject, "offer"), eq(s.offers.id, s.approvalRequests.subjectId)))
       .innerJoin(s.applications, eq(s.applications.id, s.offers.applicationId))
       .innerJoin(s.candidates, eq(s.candidates.id, s.applications.candidateId))
       .innerJoin(s.jobs, eq(s.jobs.id, s.applications.jobId))
       .where(
         and(
-          eq(s.offerApprovals.approverId, userId),
-          eq(s.offerApprovals.status, "pending"),
-          eq(s.offers.status, "pending_approval"),
-          sql`NOT EXISTS (SELECT 1 FROM offer_approvals oa WHERE oa.offer_id = ${s.offers.id} AND oa.position < ${s.offerApprovals.position} AND oa.status <> 'approved')`,
+          eq(s.approvalSteps.approverId, userId),
+          eq(s.approvalSteps.status, "pending"),
+          eq(s.approvalRequests.status, "pending"),
+          sql`NOT EXISTS (SELECT 1 FROM approval_steps p WHERE p.request_id = ${s.approvalSteps.requestId} AND p.position < ${s.approvalSteps.position} AND p.status <> 'approved')`,
         ),
       ),
 

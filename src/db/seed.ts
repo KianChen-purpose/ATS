@@ -17,6 +17,10 @@ const pick = <T>(arr: readonly T[]) => arr[Math.floor(faker.number.float() * arr
 
 async function reset() {
   const tables = [
+    "approval_steps",
+    "approval_requests",
+    "approval_chain_steps",
+    "approval_chains",
     "data_subject_requests",
     "consent_records",
     "retention_policies",
@@ -26,7 +30,6 @@ async function reset() {
     "audit_logs",
     "emails",
     "email_templates",
-    "offer_approvals",
     "offers",
     "scorecards",
     "interview_interviewers",
@@ -257,6 +260,26 @@ async function main() {
       subject: "{{job.title}} at {{brand.name}}",
       body: "Hi {{candidate.firstName}},\n\nYour background caught my eye. We're hiring a {{job.title}} at {{brand.name}} and I think you'd be a great fit. Open to a quick chat?\n\n{{sender.name}}",
     },
+  ]);
+
+  console.log("Creating approval chains…");
+  const chain = async (name: string, subject: "job" | "offer", minAmount: number | null, steps: { approverType: "user" | "hiring_manager"; approverId?: string }[]) => {
+    const [row] = await db.insert(s.approvalChains).values({ name, subject, minAmount }).returning();
+    await db.insert(s.approvalChainSteps).values(steps.map((st, position) => ({ chainId: row.id, position, approverType: st.approverType, approverId: st.approverId ?? null })));
+    return {
+      id: row.id,
+      approvers: (hiringManagerId: string) =>
+        steps.map((st) => (st.approverType === "hiring_manager" ? hiringManagerId : st.approverId!)).filter((id, i, all) => id !== all[i - 1]),
+    };
+  };
+  const cfo = userByName["James Carter"].id;
+  const cpo = userByName["Olivia Bennett"].id;
+  await chain("New jobs – all brands", "job", null, [{ approverType: "hiring_manager" }, { approverType: "user", approverId: cpo }]);
+  const offerChain = await chain("Offers – all brands", "offer", null, [{ approverType: "hiring_manager" }, { approverType: "user", approverId: cfo }]);
+  const seniorOfferChain = await chain("Offers $200k+ – all brands", "offer", 200_000, [
+    { approverType: "hiring_manager" },
+    { approverType: "user", approverId: cpo },
+    { approverType: "user", approverId: cfo },
   ]);
 
   console.log("Creating jobs…");
@@ -570,15 +593,34 @@ async function main() {
           decidedAt: ["accepted", "declined"].includes(offerStatus) ? new Date(offerAt.getTime() + 5 * DAY) : null,
         })
         .returning();
-      const approvers = [users.find((u) => u.id === job.hiringManagerId)!, userByName["James Carter"]];
-      await db.insert(s.offerApprovals).values(
-        approvers.map((a, idx) => ({
-          offerId: offer.id,
-          approverId: a.id,
-          position: idx,
-          status: offerStatus === "pending_approval" && idx === 1 ? ("pending" as const) : ("approved" as const),
-          decidedAt: offerStatus === "pending_approval" && idx === 1 ? null : new Date(offerAt.getTime() + (idx + 1) * 0.5 * DAY),
-        })),
+      const chain = offer.baseSalary >= 200_000 ? seniorOfferChain : offerChain;
+      const approvers = chain.approvers(job.hiringManagerId!);
+      const pending = offerStatus === "pending_approval";
+      const [request] = await db
+        .insert(s.approvalRequests)
+        .values({
+          subject: "offer",
+          subjectId: offer.id,
+          jobId: job.id,
+          chainId: chain.id,
+          status: pending ? "pending" : "approved",
+          requestedById: recruiter,
+          createdAt: offerAt,
+          completedAt: pending ? null : new Date(offerAt.getTime() + approvers.length * 0.5 * DAY),
+        })
+        .returning();
+      await db.insert(s.approvalSteps).values(
+        approvers.map((approverId, idx) => {
+          // Pending offers wait on their last approver.
+          const waiting = pending && idx === approvers.length - 1;
+          return {
+            requestId: request.id,
+            position: idx,
+            approverId,
+            status: waiting ? ("pending" as const) : ("approved" as const),
+            decidedAt: waiting ? null : new Date(offerAt.getTime() + (idx + 1) * 0.5 * DAY),
+          };
+        }),
       );
       acts.push({
         candidateId: cand.id,
