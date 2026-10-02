@@ -322,7 +322,7 @@ async function main() {
 
   console.log("Creating jobs…");
   let openingSeq = 1000;
-  const jobRows: { job: typeof s.jobs.$inferSelect; stages: (typeof s.jobStages.$inferSelect)[]; dept: string; team: typeof users }[] = [];
+  const jobRows: { job: typeof s.jobs.$inferSelect; stages: (typeof s.jobStages.$inferSelect)[]; dept: string; team: typeof users; openings: number }[] = [];
   for (const j of JOBS) {
     const status = j.status ?? "open";
     const openedDaysAgo = faker.number.int({ min: 20, max: 140 });
@@ -355,13 +355,14 @@ async function main() {
       Array.from({ length: j.openings ?? 1 }, () => ({
         jobId: job.id,
         code: `REQ-${openingSeq++}`,
+        createdAt: daysAgo(openedDaysAgo),
         reason: pick(["new_headcount", "new_headcount", "backfill"] as const),
         targetStartDate: new Date(now + faker.number.int({ min: 20, max: 120 }) * DAY).toISOString().slice(0, 10),
       })),
     );
     const team = faker.helpers.arrayElements(interviewers.filter((u) => u.id !== job.hiringManagerId), 3);
     await db.insert(s.jobHiringTeam).values(team.map((u) => ({ jobId: job.id, userId: u.id })));
-    jobRows.push({ job, stages, dept: j.dept, team });
+    jobRows.push({ job, stages, dept: j.dept, team, openings: j.openings ?? 1 });
     if (job.publishedOnCareerSite) {
       await db.insert(s.applicationQuestions).values([
         {
@@ -400,9 +401,12 @@ async function main() {
   const activeJobs = jobRows.filter((r) => r.job.status !== "draft");
   // Funnel shape: how far applications progress. Index = furthest stage position reached.
   const reachWeights = [6, 34, 22, 15, 9, 7, 4, 3];
+  // Older applications have had time to finish, so more of them reached offer and hire.
+  const hiresByJob = new Map<string, number>();
+  const matureReachWeights = [4, 24, 20, 16, 11, 9, 6, 10];
 
   for (let i = 0; i < 320; i++) {
-    const { job, stages, dept, team } = pick(activeJobs);
+    const { job, stages, dept, team, openings } = pick(activeJobs);
     const firstName = faker.person.firstName();
     const lastName = faker.person.lastName();
     const skills = faker.helpers.arrayElements(SKILLS_BY_DEPT[dept] ?? ["Communication"], { min: 2, max: 4 });
@@ -449,19 +453,24 @@ async function main() {
 
     // Sourced candidates start at Lead; inbound at Application Review.
     const startPos = source.category === "sourced" ? 0 : 1;
-    let reach = Math.max(startPos, weightedPick([0, 1, 2, 3, 4, 5, 6, 7], reachWeights));
+    let reach = Math.max(startPos, weightedPick([0, 1, 2, 3, 4, 5, 6, 7], appliedAgo > 40 ? matureReachWeights : reachWeights));
     if (job.status === "on_hold") reach = Math.min(reach, 3);
+    // A job can't hire more people than it has openings.
+    if (reach === 7 && (hiresByJob.get(job.id) ?? 0) >= openings) reach = 5;
+    if (reach === 7) hiresByJob.set(job.id, (hiresByJob.get(job.id) ?? 0) + 1);
 
     // Walk through stages, spreading time across the elapsed window.
     const path = stages.filter((st) => st.position >= startPos && st.position <= reach);
-    const stepDays = appliedAgo / (path.length + 1);
-    const events: (typeof s.applicationStageEvents.$inferInsert)[] = [];
-    const recruiter = job.recruiterId!;
-    let t = appliedAgo;
-
     const isHired = reach === 7;
     // Applications that stopped before the end: most are archived, recent ones are still active.
     const archived = !isHired && (appliedAgo > 12 ? faker.number.float() < 0.62 : faker.number.float() < 0.15);
+    // Finished applications (hired or archived) took a few weeks and ended in the past; active
+    // ones are spread across their whole elapsed time, so they're still in motion today.
+    const span = isHired || archived ? Math.min(appliedAgo, faker.number.int({ min: 10, max: 50 })) : appliedAgo;
+    const stepDays = span / (path.length + 1);
+    const events: (typeof s.applicationStageEvents.$inferInsert)[] = [];
+    const recruiter = job.recruiterId!;
+    let t = appliedAgo;
     const currentStage = path[path.length - 1];
 
     const [app] = await db
@@ -646,13 +655,14 @@ async function main() {
         .values({
           applicationId: app.id,
           status: offerStatus,
-          baseSalary: Math.round(faker.number.int({ min: job.compMin!, max: job.compMax! }) / 1000) * 1000,
+          baseSalary: Math.round(faker.number.int({ min: Math.round(job.compMin! * 0.95), max: Math.round(job.compMax! * 1.06) }) / 1000) * 1000,
           bonusPercent: pick([10, 15, 20]),
           startDate: new Date(now + faker.number.int({ min: 14, max: 60 }) * DAY).toISOString().slice(0, 10),
           createdById: recruiter,
           createdAt: offerAt,
           sentAt: ["sent", "accepted", "declined"].includes(offerStatus) ? new Date(offerAt.getTime() + 2 * DAY) : null,
-          decidedAt: ["accepted", "declined"].includes(offerStatus) ? new Date(offerAt.getTime() + 5 * DAY) : null,
+          decidedAt: ["accepted", "declined"].includes(offerStatus) ? new Date(offerAt.getTime() + faker.number.int({ min: 3, max: 9 }) * DAY) : null,
+          declineReason: offerStatus === "declined" ? pick(["Accepted another offer", "Compensation", "Compensation", "Counter-offer from current employer", "Role scope", "Relocation"]) : null,
         })
         .returning();
       const chain = offer.baseSalary >= 200_000 ? seniorOfferChain : offerChain;
@@ -729,15 +739,17 @@ async function main() {
     await db.insert(s.activities).values(acts);
   }
 
-  // Mark openings filled for hires.
+  // Mark openings filled for hires: the nth hire on a job fills its nth opening, on the hire date.
   await db.execute(sql`
-    UPDATE openings o SET status = 'filled', filled_at = now()
-    WHERE o.id IN (
-      SELECT DISTINCT ON (a.id) o2.id FROM applications a
-      JOIN openings o2 ON o2.job_id = a.job_id
-      WHERE a.status = 'hired'
-      ORDER BY a.id, o2.code
-    )`);
+    WITH hires AS (
+      SELECT a.job_id, a.hired_at, row_number() OVER (PARTITION BY a.job_id ORDER BY a.hired_at, a.id) AS n
+      FROM applications a WHERE a.status = 'hired'
+    ), slots AS (
+      SELECT o.id, o.job_id, row_number() OVER (PARTITION BY o.job_id ORDER BY o.code) AS n FROM openings o
+    )
+    UPDATE openings o SET status = 'filled', filled_at = COALESCE(h.hired_at, now())
+    FROM slots sl JOIN hires h ON h.job_id = sl.job_id AND h.n = sl.n
+    WHERE o.id = sl.id`);
 
   console.log("Creating talent pools…");
   {

@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { inputClass, labelClass } from "@/components/ui/modal";
 import { cn, DEFAULT_TZ, fmt } from "@/lib/utils";
-import { businessDays, busyPeople, slotsForDay, type Busy } from "@/lib/availability";
+import { BUSINESS_HOURS, businessDays, busyPeople, slotsForDay, type Busy } from "@/lib/availability";
 import { createSchedulingLink, getAvailability, scheduleInterview } from "@/server/actions/scheduling";
 
 type Person = { id: string; name: string; title: string | null; role: string };
@@ -28,7 +28,12 @@ export function Scheduler(props: {
   const [stageId, setStageId] = useState(props.defaultStageId);
   const [duration, setDuration] = useState(props.stages.find((s) => s.id === props.defaultStageId)?.type === "screen" ? 30 : 60);
   const [interviewerIds, setInterviewerIds] = useState<string[]>(props.defaultInterviewerIds);
-  const [weekOffset, setWeekOffset] = useState(0);
+  // Open on next week once this week's business hours are over (Friday evening, weekends).
+  const [weekOffset, setWeekOffset] = useState(() => {
+    const today = new TZDate(Date.now(), DEFAULT_TZ);
+    const dow = (today.getDay() + 6) % 7;
+    return dow >= 5 || (dow === 4 && today.getHours() >= BUSINESS_HOURS.endHour - 1) ? 1 : 0;
+  });
   const [busy, setBusy] = useState<Record<string, Busy[]>>({});
   const [loading, startLoading] = useTransition();
   const [saving, startSaving] = useTransition();
