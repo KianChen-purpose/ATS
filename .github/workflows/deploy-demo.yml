@@ -1,0 +1,73 @@
+# Deploys the PATS demo environment (synthetic data, demo sign-in) to Azure Canada Central.
+# Run it from Actions → "Deploy demo" → Run workflow. One-time setup: docs/DEMO-HOSTING.md.
+name: Deploy demo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC sign-in to Azure, no stored Azure password
+  contents: read
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_DEMO_RESOURCE_GROUP || 'pats-demo-rg' }}
+  LOCATION: canadacentral
+  PREFIX: ${{ vars.AZURE_DEMO_PREFIX || 'patsdemo' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: demo
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Sign in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resource group (Canada Central)
+        run: az group create --name "$RESOURCE_GROUP" --location "$LOCATION" --tags app=pats environment=demo data=synthetic-only --output none
+
+      - name: Shared resources (registry, Postgres, Container Apps environment)
+        id: base
+        run: |
+          out=$(az deployment group create --resource-group "$RESOURCE_GROUP" --name "pats-demo-base" \
+            --template-file infra/demo/main.bicep \
+            --parameters location="$LOCATION" prefix="$PREFIX" deployApps=false \
+                         postgresPassword="${{ secrets.DEMO_POSTGRES_PASSWORD }}" sessionSecret="${{ secrets.DEMO_SESSION_SECRET }}" \
+            --query properties.outputs --output json)
+          echo "registry=$(echo "$out" | jq -r .registryName.value)" >> "$GITHUB_OUTPUT"
+
+      - name: Build the image in Azure Container Registry
+        run: |
+          az acr build --registry "${{ steps.base.outputs.registry }}" --image "pats:${GITHUB_SHA}" \
+            --build-arg PATS_ENV=demo --file Dockerfile .
+
+      - name: Web app and worker
+        id: apps
+        run: |
+          out=$(az deployment group create --resource-group "$RESOURCE_GROUP" --name "pats-demo-apps" \
+            --template-file infra/demo/main.bicep \
+            --parameters location="$LOCATION" prefix="$PREFIX" deployApps=true imageTag="${GITHUB_SHA}" \
+                         postgresPassword="${{ secrets.DEMO_POSTGRES_PASSWORD }}" sessionSecret="${{ secrets.DEMO_SESSION_SECRET }}" \
+            --query properties.outputs --output json)
+          echo "url=$(echo "$out" | jq -r .appUrl.value)" >> "$GITHUB_OUTPUT"
+
+      - name: Wait until it answers
+        run: |
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "${{ steps.apps.outputs.url }}/login" || true)
+            [ "$code" = "200" ] && echo "PATS demo is up: ${{ steps.apps.outputs.url }}" && exit 0
+            sleep 15
+          done
+          echo "The demo didn't answer in time; check the container app logs." && exit 1
+
+      - name: Summary
+        run: echo "### PATS demo → ${{ steps.apps.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"

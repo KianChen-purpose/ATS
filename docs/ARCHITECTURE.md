@@ -79,7 +79,7 @@ Rules:
 ## 6. Identity & sessions
 
 1. **Staff:** Entra ID OIDC (SSO and MFA via Conditional Access) plus SCIM provisioning. Roles map from Entra groups.
-2. **Demo sign-in** (pick any user) is allowed only when `PATS_DEMO_AUTH=true` **and** `NODE_ENV !== "production"`. The app refuses to start in production if demo auth is enabled.
+2. **Demo sign-in** (pick any user) is allowed only when `PATS_DEMO_AUTH=true` **and** either `NODE_ENV !== "production"` or the deployment is a **demo environment** (`PATS_ENV=demo`). The app refuses to start in production with demo auth unless `PATS_ENV=demo`. A demo environment holds synthetic data only: it refuses to start with Microsoft 365, Teams bot or reporting-store credentials, shows a "demo · synthetic data only" banner on every page, and is never indexed by search engines. Real Purpose production uses `PATS_ENV=production` (or unset) and Entra ID.
 3. **No fallback secrets.** `SESSION_SECRET` and the other secrets are required and come from Key Vault in Azure. If one is missing, the app fails at boot.
 4. **Candidates and agencies** use separate authentication (magic link or Entra External ID). Their sessions can never reach staff routes or staff server actions.
 
@@ -118,6 +118,7 @@ The PRD's MVP (Phase 1) includes SSO/SCIM, RBAC, audit, retention and consent. T
 
 | Date | Decision | By |
 |---|---|---|
+| 2026-10-03 | §6.2 relaxed: a hosted **demo environment** (`PATS_ENV=demo`) may use demo sign-in in a production build, so the demo can be launched for others to try. Guardrails: synthetic data only, no live M365/Teams/reporting credentials (boot refuses them), banner on every page, `noindex`. Production stays Entra-only. | Kian Chen |
 | 2026-10-02 | **PROPOSED, pending Kian:** Teams approvals. Approving or rejecting from a Teams card runs the web decision service as the PATS user matched by Entra object id; unknown Teams users get a sign-in prompt and no decision. Cards show the approver summary (pay only for roles that can see it). The bot lives behind its own integration adapter (`src/server/integrations/teams`) next to `m365()`, accepts only Bot Framework-signed requests, and posts only to Bot Connector hosts. | Claude (Phase 6), awaiting approval |
 | 2026-10-02 | **PROPOSED, pending Kian:** mail sync scope. From a user's own mailbox PATS imports only replies in conversations PATS started; from the shared mailbox it also imports mail from an address belonging to exactly one candidate. Staff senders, unknown or ambiguous senders and anonymized candidates are skipped. The queue port (D5) now exists with a Postgres adapter (SKIP LOCKED claims, backoff, dead-letter) used by mail sync; payloads carry ids only. | Claude (Phase 6), awaiting approval |
 | 2026-10-02 | **PROPOSED, pending Kian:** SCIM provisioning. New accounts start as Interviewer (least access) until an Entra app role or a role-mapped group applies. Deprovisioning and SCIM DELETE deactivate, never delete (history stays, §4.5), and revoke the user's stored Microsoft token. A provisioned email that matches an existing PATS account adopts it rather than creating a duplicate. | Claude (Phase 6), awaiting approval |

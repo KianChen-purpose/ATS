@@ -19,6 +19,24 @@ describe("boot configuration", () => {
     expect(demoAuthEnabled()).toBe(expected);
   });
 
+  it("a demo environment allows demo sign-in in a production build, and refuses live services", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PATS_DEMO_AUTH", "true");
+    vi.stubEnv("PATS_ENV", "demo");
+    vi.stubEnv("SESSION_SECRET", GOOD_SECRET);
+    vi.stubEnv("DATABASE_URL", "postgres://x");
+    expect(demoAuthEnabled()).toBe(true);
+    expect(() => assertBootConfig()).not.toThrow();
+    vi.stubEnv("M365_CLIENT_SECRET", "s");
+    expect(() => assertBootConfig()).toThrow(/must not connect to live services.*M365_CLIENT_SECRET/);
+    vi.stubEnv("M365_CLIENT_SECRET", "");
+    vi.stubEnv("PATS_ENV", "staging");
+    expect(() => assertBootConfig()).toThrow(ConfigError);
+    vi.stubEnv("PATS_ENV", "production");
+    expect(demoAuthEnabled()).toBe(false);
+    expect(() => assertBootConfig()).toThrow(/not allowed in production/);
+  });
+
   it("refuses to boot in production with demo auth on", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("PATS_DEMO_AUTH", "true");

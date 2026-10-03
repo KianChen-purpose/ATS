@@ -17,7 +17,7 @@ Read [PRD.md](PRD.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before yo
    - Never put PII bodies (emails, resumes) in logs or `integration_events`.
    - All resources live in Canadian regions.
 5. **Schema changes:** run `npm run db:generate` and commit the SQL migration. Never use `drizzle-kit push --force` against shared or production databases.
-6. **Auth:** demo sign-in only with `PATS_DEMO_AUTH=true` outside production. No fallback secrets.
+6. **Auth:** demo sign-in only with `PATS_DEMO_AUTH=true`, and only outside production or in a hosted demo environment (`PATS_ENV=demo`: synthetic data only, no live Microsoft 365, demo banner on every page). No fallback secrets.
 7. **Bilingual and brand-aware:** candidate-facing content supports EN and FR-CA. Templates, career sites and approval chains are scoped by brand.
 8. **Integrations go only through the ports:** `m365()`, search, file store, queue and AI gateway. Long or retryable work goes to the worker. Graph calls respect `Retry-After`.
 9. **Tests:** cover every new policy rule and every service that writes data, asserting the audit and stage-event side effects. Run `npm run typecheck && npm run lint && npm test` before you push.

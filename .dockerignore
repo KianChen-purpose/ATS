@@ -1,0 +1,12 @@
+.git
+.next
+node_modules
+.storage
+.storage-test
+.env
+.env.*
+!.env.example
+tests
+*.log
+tsconfig.tsbuildinfo
+.devcontainer

@@ -5,6 +5,7 @@ import { db, schema as s } from "@/db";
 import { m365, m365Configured, type MailMessage } from "@/server/integrations/m365";
 import { queue, type ClaimedJob, type JobHandler } from "@/server/integrations/queue";
 import { assertCanSeeJobs, canManageRecruiting, ForbiddenError, NotFoundError, systemActor, type Actor, type UserActor } from "@/server/policy";
+import { isDemoEnvironment } from "@/server/config";
 import { recordAudit } from "./audit";
 
 /**
@@ -253,7 +254,7 @@ export async function pruneSyncState(olderThanDays = 30) {
 // ---------------------------------------------------------------------------
 
 export function canSimulateReplies() {
-  return !m365Configured() && process.env.NODE_ENV !== "production";
+  return !m365Configured() && (process.env.NODE_ENV !== "production" || isDemoEnvironment());
 }
 
 /**

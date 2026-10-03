@@ -15,9 +15,18 @@ export class ConfigError extends Error {
 
 const isProduction = () => process.env.NODE_ENV === "production";
 
-/** Demo sign-in ("pick any user") is allowed only with PATS_DEMO_AUTH=true outside production. */
+/**
+ * A hosted demo environment (PATS_ENV=demo): a production build that holds synthetic data only.
+ * Demo sign-in may run there; Microsoft 365 and Entra stay off so nothing reaches real people, and
+ * every page carries a "demo" banner. Approved by Kian Chen, 2026-10-03 (ARCHITECTURE.md §6.2).
+ */
+export function isDemoEnvironment() {
+  return process.env.PATS_ENV === "demo";
+}
+
+/** Demo sign-in ("pick any user"): PATS_DEMO_AUTH=true, and either not production or a demo environment. */
 export function demoAuthEnabled() {
-  return process.env.PATS_DEMO_AUTH === "true" && !isProduction();
+  return process.env.PATS_DEMO_AUTH === "true" && (!isProduction() || isDemoEnvironment());
 }
 
 export function sessionSecret(): Uint8Array {
@@ -35,8 +44,16 @@ export function entraConfigured() {
 
 /** Called once at server start. Throws to refuse to boot. */
 export function assertBootConfig() {
-  if (isProduction() && process.env.PATS_DEMO_AUTH === "true") {
-    throw new ConfigError("PATS_DEMO_AUTH=true is not allowed in production. Remove it and use Entra ID sign-in.");
+  if (isProduction() && process.env.PATS_DEMO_AUTH === "true" && !isDemoEnvironment()) {
+    throw new ConfigError("PATS_DEMO_AUTH=true is not allowed in production. Remove it and use Entra ID sign-in (or set PATS_ENV=demo for a synthetic-data demo environment).");
+  }
+  if (process.env.PATS_ENV && !["demo", "production"].includes(process.env.PATS_ENV)) {
+    throw new ConfigError('PATS_ENV must be "demo" or "production" (or unset).');
+  }
+  if (isDemoEnvironment()) {
+    // A demo holds made-up people: no real mail, calendars, Teams or sign-in from it.
+    const live = ["M365_TENANT_ID", "M365_CLIENT_ID", "M365_CLIENT_SECRET", "TEAMS_BOT_APP_ID", "TEAMS_BOT_APP_SECRET", "REPORTING_DATABASE_URL"].filter((k) => process.env[k]);
+    if (live.length) throw new ConfigError(`A demo environment (PATS_ENV=demo) must not connect to live services. Remove: ${live.join(", ")}.`);
   }
   sessionSecret();
   if (!process.env.DATABASE_URL) throw new ConfigError("DATABASE_URL is required.");

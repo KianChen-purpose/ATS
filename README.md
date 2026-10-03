@@ -19,6 +19,10 @@ Purpose Unlimited's in-house recruiting platform: Ashby-grade recruiting, built 
 
 The forwarded address is private to your GitHub account unless you change the port's visibility. Codespaces run in GitHub's US/EU regions, so use them only with the synthetic demo data, never real candidate data (ARCHITECTURE.md §5.1). To start fresh: `npm run db:reset`. Logs: `/tmp/pats-dev.log`, `/tmp/pats-worker.log`. Stop the Codespace when you're done to save hours.
 
+## Shareable hosted demo (Azure Canada Central)
+
+A public URL with synthetic data and demo sign-in, running as a locked-down demo environment (`PATS_ENV=demo`). Setup and costs are in [docs/DEMO-HOSTING.md](docs/DEMO-HOSTING.md): one Cloud Shell script, five GitHub secrets, then Actions → **Deploy demo**.
+
 ## Quick start
 
 Requirements: Node 20+, PostgreSQL 16 (or Docker).
